@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/kohler/code';
+    code_folder = '/Users/lindseyhasak/code';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -83,7 +83,7 @@ binsToUse     = 1:10;          %Sweep             % indices of bins to include i
 %binsToUse     = 0;            %Would typically do this though           % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 freqsToUse    = [1 2];                   % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
 % chose freq 1 and 2, because 3Hz is carrier, so you want nf1 clean
-condsToUse    = [3];                      % if you want to include all conditions, create a vector here listing all condition numbers
+condsToUse    = [1];                      % if you want to include all conditions, create a vector here listing all condition numbers
 % only look at condition 1 first, if you want to look at all 3 conditions
 % together, do [1 2 3]
 nReg          = 7;                          % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
@@ -184,28 +184,48 @@ l_width = 2
 
 %% PLOT ERROR ELLIPSE
 close all;
+figure
+% Specify which bin to plot (usually the average)
 bin_to_plot = 'ave';
-rc_idx = 1;
+% Specify which RC component to plot
+rc_idx = 2;
+% Specify which harmonic to plot (always 1)
 h_idx = 1;
 
+% Link the bin to plot to the bin index (11 corresponds to the average of
+% the 10 useable bins) 
 if bin_to_plot == 'ave'
     b_idx = 11;
 else
     b_idx = bin_to_plot;
 end
 
+% Concatenate the real signal and the imaginary signal together (bin x
+% harmonic x subject x condition)
 xy_vals = cat(2, squeeze(rcaStruct(h_idx).subjects.real_signal(b_idx,:,rc_idx,:)), ...
                  squeeze(rcaStruct(h_idx).subjects.imag_signal(b_idx,:,rc_idx,:)));
+% Set na vals so they'll be ignored
 nan_vals = sum(isnan(xy_vals),2) > 0;
+
+% Compute ellipse based on standard deviation and standard error of the
+% mean - SEM is usually smaller and STD is usually bigger
 [~,~,~,std_ellipse] = fitErrorEllipse(xy_vals(~nan_vals,:),'1STD');
 [~,~,~,sem_ellipse] = fitErrorEllipse(xy_vals(~nan_vals,:),'SEM');
+
+% Project xy_vals into vector space
 vector_means = nanmean(xy_vals);
 hold on
+% Plot ellipses
 plot(sem_ellipse(:,1), sem_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
 plot(std_ellipse(:,1), std_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
+
+% Plot individual subject data 
 plot(xy_vals(~nan_vals,1),xy_vals(~nan_vals,2),'sq','linewidth',l_width,'Color', 'g');
+
+% Plot vector amplitude
 p_h = plot([0 vector_means(1)],[0 vector_means(2)],'-','linewidth',l_width,'Color','b');
 
+% Create grid based on scatter of data
 x_max = ceil(max(abs(xy_vals(~nan_vals,1))));
 y_max = ceil(max(abs(xy_vals(~nan_vals,2))));
 xlim([-x_max, x_max])
@@ -213,6 +233,18 @@ ylim([-y_max, y_max])
 axis square 
 plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
 plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
+
+%% Pull out phase significance - another way 
+
+% Shows average t_sig for each component for the first harmonic
+squeeze(rcaStruct(1).stats.t_sig(end, 1, :));
+
+% Shows average t2_sig for each component for the first harmonic
+squeeze(rcaStruct(1).stats.t2_sig(end, 1, :));
+
+% Can also look at this bin-by-bin
+squeeze(rcaStruct(1).stats.t2_sig(:, 1, :))
+
 
 %% FLIP and REORDER RCA TOPOGRAPHIES
 h_idx = 1;
@@ -229,17 +261,43 @@ mrC.plotOnEgi(rca_new.W(:,2))
 
 %% LOAD IN AXX DATA AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
 close all;
-rc_idx = 1;
-
+rc_idx = 2;
 full_w = rca_new.W(:,rc_idx);
 axx_rca_full = axxRCAmake(folder_names, full_w);
 
 x_vals = linspace(0,1,421);
 x_vals = x_vals(2:end); 
-axx_mean = nanmean(cell2mat(axx_rca_full.Projected(1,:)),2);
-axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(1,:)),0,2)./sqrt(length(folder_names));
-plot(x_vals, axx_mean, 'g-', 'linewidth', 2);
-hold on;
-ErrorBars(x_vals', axx_mean, axx_stderr,'color',[0,1,0]);
+
+% red   green   blue
+colors = [1,0,0; 0,1,0; 0,0,1];
+
+figure; clf
+for c = 1:(size(axx_rca_full.Projected,1)-1) % All conditions except Vernier
+    axx_mean = nanmean(cell2mat(axx_rca_full.Projected(c,:)),2);
+    axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(c,:)),0,2)./sqrt(length(folder_names));
+    ph(c) = plot(x_vals, axx_mean, '-', 'linewidth', 2, 'color', colors(c,:));
+    hold on; 
+    ErrorBars(x_vals', axx_mean, axx_stderr,'color',colors(c,:));
+end
+
+legend(ph, 'Condition 1', 'Condition 2', 'Condition 3');
+
+%% Component amplitude plot - in progress
+
+comp_n = [1 2 3 4 5 6]
+
+
+for h  = 1:length(freqsToUse)
+    for c = 1:length(nComp)
+    % Find the mean amplitude of each component 
+    curr_amp = rcaStruct(h).mean.amp_signal(end,:,c); %currently just for 
+    curr_errlo = rcaStruct(h).stats.amp_lo_err(end,:, c);
+    curr_errhi = rcaStruct(h).stats.amp_up_err(end,:, c);
+    end
+    plot(comp_n, curr_amp);
+end
+    
+  
+ 
 
 
