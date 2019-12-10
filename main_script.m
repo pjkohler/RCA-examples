@@ -79,13 +79,13 @@ folder_names = new_names; clear new_names;
 
 % this analysis is structured for Sweep analysis
 
-binsToUse     = 1:10;          %Sweep             % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-%binsToUse     = 0;            %Would typically do this though           % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-freqsToUse    = [1 2];                   % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
-% chose freq 1 and 2, because 3Hz is carrier, so you want nf1 clean
-condsToUse    = [1];                      % if you want to include all conditions, create a vector here listing all condition numbers
-% only look at condition 1 first, if you want to look at all 3 conditions
-% together, do [1 2 3]
+binsToUse     = 1:10;          % Sweep indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
+% binsToUse     = 0;           % Would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
+freqsToUse    = [1 2];         % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
+                               % Chose freq 1 and 2, because 3Hz is carrier, so you want nf1 clean
+condsToUse    = [1];           % if you want to include all conditions, create a vector here listing all condition numbers
+                               % only look at condition 1 first, if you want to look at all 3 conditions
+                               % together, do [1 2 3]
 nReg          = 7;                          % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
 %trialsToUse   = [:];                       % which trials do you want to use? I've commented here so that it defaults to all trials it can find for each participant.
 nComp         = 6;                          % number of RCs that you want to look at (3-5 are good values, but see across-trial eigenvalue plot in rca output)
@@ -290,11 +290,12 @@ comp_n = [1 2 3 4 5 6]
 for h  = 1:length(freqsToUse)
     for c = 1:length(nComp)
     % Find the mean amplitude of each component 
-    curr_amp = rcaStruct(h).mean.amp_signal(end,:,c); %currently just for 
-    curr_errlo = rcaStruct(h).stats.amp_lo_err(end,:, c);
-    curr_errhi = rcaStruct(h).stats.amp_up_err(end,:, c);
+    curr_amp = rcaStruct(h).mean.amp_signal(end, : , c); %currently just for 
+    curr_errlo = rcaStruct(h).stats.amp_lo_err(end, : , c);
+    curr_errhi = rcaStruct(h).stats.amp_up_err(end, : , c);
     end
     plot(comp_n, curr_amp);
+    
 end
     
   
