@@ -42,9 +42,8 @@ end
 
 %% Set up some analysis parameters and variables
 
-saveData      = true;                                                                             % set to true if you want to automatically save the output of rcaSweep into the 'outputs' directory
-printFigures  = true;                                                                             % set to true if you want to automatically print the figures and save them into the'outputs' directory
-save_name  = 'rcaData_Lochy_Cond3';    % name of output                                                         % set to the desired ouput file name - this will contain one big data struct with the results from rcaSweep
+print_figures  = true;                                                                             % set to true if you want to automatically print the rca topo figures and save them into the'outputs' directory
+save_name  = 'rcaData_Lochy_Cond3';    % name of output                                            % set to the desired ouput file name - this will contain one big data struct with the results from rcaSweep
 
 data_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data'; % change to your data directory
 out_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/outputs';     % set to your output directory
@@ -79,104 +78,93 @@ folder_names = new_names; clear new_names;
 
 % this analysis is structured for Sweep analysis
 
-binsToUse     = 1:10;          %Sweep             % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-%binsToUse     = 0;            %Would typically do this though           % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-freqsToUse    = [1 2];                   % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
-% chose freq 1 and 2, because 3Hz is carrier, so you want nf1 clean
-condsToUse    = [1];                      % if you want to include all conditions, create a vector here listing all condition numbers
-% only look at condition 1 first, if you want to look at all 3 conditions
-% together, do [1 2 3]
-nReg          = 7;                          % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
-%trialsToUse   = [:];                       % which trials do you want to use? I've commented here so that it defaults to all trials it can find for each participant.
-nComp         = 6;                          % number of RCs that you want to look at (3-5 are good values, but see across-trial eigenvalue plot in rca output)
-chanToCompare = 65;                         % channel to use for a performance evaluation, we typically use 75 but should be determined on the basis of a representative 'good electrode' for your study - we use this just as a sanity check
-dataType      = 'RLS';                      % can also be 'DFT' if you have DFT exports
+%% Run on the first 3 conditions (all oddball)
+% (1) pseudo-fonts with word oddball
+% (2) pseudo-fonts with non-word oddball 
+% (3) non-words with word oddball
 
-rcPlotStyle = 'matchMaxSignsToRc1';         % not req'd. see 'help rcaRun', can be: 'matchMaxSignsToRc1' (default) or 'orig'
+use_bins = 0;          % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
+%use_bins = 1:10;      % would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
+use_freqs = 1:2;       % indices of harmonics to include in analysis 
+                       % these will index the harmonics present in the DFT/RLS export
+                       % Because 3Hz is the carrier, and 1 Hz is the
+                       % oddball, we are including only the first two
+                       % harmonics of the oddball
+                        
+use_conds = 1:3;       % if you want to include all conditions, create a vector here listing all condition numbers
+                       % only look at condition 1 first, if you want to look at all 3 conditions
+use_trials = [];
+                       
+n_reg = 7;             % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
+n_comp = 6;            % number of RCs that you want to look at (3-5 are good values, but see across-trial eigenvalue plot in rca output)
+comp_channel = 65;     % channel to use for a performance evaluation, we typically use 75 but should be determined on the basis of a representative 'good electrode' for your study - we use this just as a sanity check
+data_type = 'RLS';     % can also be 'DFT' if you have DFT exports
 
-forceSourceData = 0;                        % set to true if you have source space; we didn't do this in our study
-
-%% Run individual level RCA
-% Hopefully, you won't need to change anything in this section
-
-save_path = [out_location,'/',save_name]; % returns the full file path to your output folder
-
-% Run some checks - have you analysed before / does the output file already
-% exist?
-launchAnalysis = false;
-if isempty(dir([save_path,'.mat'])) % if .mat file specified by saveFileNamePath does not exist, go ahead and run analysis
-   launchAnalysis = true; 
+force_reload = false;  % if true, reload the data text files and generate
+                       % new .mat files for quick loading of the data
+                       % set to true if you have
+                       % re-exported the data from xDiva
     
-else % if it does exist, print warning and give options for overwriting / re-running with different filename
-    fprintf('\n\nWARNING: The file %s.mat already exists for this data directory!\n\n',save_path);
-    
-    if getYN('Would you like to run rcaSweep anyway and OVERWRITE this file?') % do you want to overwrite and run again?
-        launchAnalysis = true;
-        
-    else % if you don't want to do that, would you like to use a new filename instead?
-        if getYN('Would you like to run rcaSweep and save the output using a NEW filename?')
-            newFileName = input(sprintf('Please type in a new filename and press enter (file already on disk = %s):  ',save_name),'s');
-            save_path = [data_location,'/',newFileName];
-            launchAnalysis = true;
-        end
-    end
-end
+rca_odd = rcaSweep(folder_names, use_bins, use_freqs, use_conds, use_trials, n_reg, n_comp, data_type, comp_channel, force_reload);
 
-% Now we can do the actual analysis...
-if launchAnalysis
-    
-    rcaStruct = rcaSweep(folder_names,binsToUse,freqsToUse,condsToUse,[],nReg,nComp,dataType,chanToCompare,[],rcPlotStyle,forceSourceData);
-    % rcaSweep takes inputs like this:
-    % rcaSweep(PATHNAMES,[BINSTOUSE],[FREQSTOUSE],[CONDSTOUSE],[TRIALSTOUSE],[NREG],[NCOMP],[DATATYPE],[COMPARECHAN],[SHOW],[RCPLOTSTYLE])
-    % help rcaSweep has more information...
-    
-    if printFigures, print('-dpsc',[save_path,'.ps'],'-append'), end
-    if saveData, save(save_path,'rcaStruct'), end
-
-else % if you in fact *don't* want to run RCA (you ansered n to all of the above checks), just load the data you already have.
-    load(save_path);
-end
+if print_figures, print('-dpsc','~/Desktop/rca_odd.ps','-append'), end
 
 % THIS SECTION OF THE CODE: 
-% returns the structure 'rcaStruct', whose dimensions are like this: 
+% returns the structure 'rca_odd', whose dimensions are like this: 
 % There will be as many 'structs' as HARMONICS you have analysed in the
 % input data
-% The output in W and A will be nChanels (128) x n RCA components
+% The output in W and A will be nChannels (128) x n RCA components
 
-%% Average RCA data across participants
+%% DO AVERAGE AND STATISTICS ON RCA STRUCT
 % Now that we have run our analyses on individual subjects, we can generate
-% group-level statistics by looping across these outputs using
-% aggregateData.
+% group-level statistics by looping across these outputs using aggregateData.
 
-keepConditions = true;       % if false, will average across conditions
+keep_conditions = true;      % if false, will average across conditions
 errorType      = 'SEM';      % can also be 'none' or '95CI' for 95% confidence intervals
 trialError     = false;      % if true, will compute trial-wise errors and statistics
 doNR           = [];         % Naka-Rushton fitting - turned off for now, but takes a logical array structured like harmonic x rc x condition
 
-% Loop over harmonics and aggregate data!
-for f = 1:length(freqsToUse)
-    
+% loop over harmonics and aggregate data!
+% note that the input and output is the same structure
+% you are simply modifying the structure, adding additional fields
+for f = 1:length(use_freqs)    
     fprintf('\n ... Harmonic no. %0.0f ...\n',f);
-    rcaStruct(f) = aggregateData(rcaStruct(f),keepConditions,errorType,trialError,doNR);
-    % Called like this:
+    rca_odd(f) = aggregateData(rca_odd(f), keep_conditions, errorType, trialError, doNR);
+    % called like this:
     % aggregateData(rca_struct, keep_conditions, error_type, trial_wise, do_nr)
     % more info in 'help'
- 
 end
 
-% THIS SECTION OF THE CODE: 
-% returns the structure 'rcaStructAgg', whose dimensions are like this:
-% There will be as many 'structs' as HARMONICS you have analysed in the
-% input data
-% The outputs in 'mean' are stored like this: 
-% bin (plus last one for vector average) x harmonic (always 1) x RCA component (plus last one - comparison electrode) x condition 
-% Have a look in the help for more info.
+%% INSPECT THE RCA STRUCT 
+h_idx = 2;
+fprintf('\n I am an rca struct, created on %s, using %s data from %.0d subjects, and %.0d conditions.', ...
+    rca_odd(h_idx).settings.runDate, ...
+    rca_odd(h_idx).settings.dataType, ...
+    length(rca_odd(h_idx).settings.dataFolders), ...
+    length(rca_odd(h_idx).settings.rcaConds));
 
-% Save the data - call it what you like
-saveFileNamePath = strcat(out_location,'/AggData_Lochy_Cond3');
-save(saveFileNamePath,'rcaStruct')
+rca_freqs = rca_odd(h_idx).settings.freqLabels(rca_odd(h_idx).settings.rcaFreqs);
+cur_freq = rca_odd(h_idx).settings.freqLabels{rca_odd(h_idx).settings.freqIndices};
+str_to_print = ' I was made using data from';
+for r = 1:(length(rca_freqs)-1)
+    str_to_print = [str_to_print, sprintf(' %s,', rca_freqs{r}) ];
+end
+str_to_print = [str_to_print, sprintf(' and %s. This part of the array of structs contain data from %s.\n', rca_freqs{end}, cur_freq) ];
+fprintf('%s', str_to_print)
 
-fprintf('\nDone! \n');
+%% FLIP and REORDER RCA TOPOGRAPHIES
+h_idx = 1;
+rca_new = flipSwapRCA(rcaStruct(h_idx), [2,1], 2);
+figure;
+subplot(2,2,1); hold on;
+mrC.plotOnEgi(rcaStruct(h_idx).W(:,1))
+subplot(2,2,2); 
+mrC.plotOnEgi(rcaStruct(h_idx).W(:,2))
+subplot(2,2,3); 
+mrC.plotOnEgi(rca_new.W(:,1))
+subplot(2,2,4); 
+mrC.plotOnEgi(rca_new.W(:,2))
+
 
 %% FIGURE PARAMS
 l_width = 2
@@ -200,8 +188,8 @@ else
     b_idx = bin_to_plot;
 end
 
-% Concatenate the real signal and the imaginary signal together (bin x
-% harmonic x subject x condition)
+% Concatenate the real signal and the imaginary signal together 
+% (bin x harmonic x subject x condition)
 xy_vals = cat(2, squeeze(rcaStruct(h_idx).subjects.real_signal(b_idx,:,rc_idx,:)), ...
                  squeeze(rcaStruct(h_idx).subjects.imag_signal(b_idx,:,rc_idx,:)));
 % Set na vals so they'll be ignored
@@ -245,20 +233,6 @@ squeeze(rcaStruct(1).stats.t2_sig(end, 1, :));
 % Can also look at this bin-by-bin
 squeeze(rcaStruct(1).stats.t2_sig(:, 1, :))
 
-
-%% FLIP and REORDER RCA TOPOGRAPHIES
-h_idx = 1;
-rca_new = flipSwapRCA(rcaStruct(h_idx), [2,1], 2);
-figure;
-subplot(2,2,1); hold on;
-mrC.plotOnEgi(rcaStruct(h_idx).W(:,1))
-subplot(2,2,2); 
-mrC.plotOnEgi(rcaStruct(h_idx).W(:,2))
-subplot(2,2,3); 
-mrC.plotOnEgi(rca_new.W(:,1))
-subplot(2,2,4); 
-mrC.plotOnEgi(rca_new.W(:,2))
-
 %% LOAD IN AXX DATA AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
 close all;
 rc_idx = 2;
@@ -287,7 +261,7 @@ legend(ph, 'Condition 1', 'Condition 2', 'Condition 3');
 comp_n = [1 2 3 4 5 6]
 
 
-for h  = 1:length(freqsToUse)
+for h  = 1:length(use_freqs)
     for c = 1:length(nComp)
     % Find the mean amplitude of each component 
     curr_amp = rcaStruct(h).mean.amp_signal(end,:,c); %currently just for 
