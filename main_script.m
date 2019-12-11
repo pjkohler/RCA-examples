@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/lindseyhasak/code';
+    code_folder = '/Users/kohler/code';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -123,6 +123,8 @@ use_freqs = 1:2;       % indices of harmonics to include in analysis
 use_conds = 1;       % if you want to include all conditions, create a vector here listing all condition numbers
                        % only look at condition 1 first, if you want to look at all 3 conditions
 use_trials = [];
+
+use_subs = [];
                        
 n_reg = 7;             % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
 n_comp = 6;            % number of RCs that you want to look at (3-5 are good values, but see across-trial eigenvalue plot in rca output)
@@ -133,7 +135,7 @@ force_reload = false;  % if true, reload the data text files and generate
                        % new .mat files for quick loading of the data
                        % set to true if you have
                        % re-exported the data from xDiva    
-rca_odd = rcaSweep(folder_names, use_bins, use_freqs, use_conds, use_trials, n_reg, n_comp, data_type, comp_channel, force_reload);
+rca_odd = rcaSweep(folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload);
 
 if print_figures, print('-dpsc','~/Desktop/rca_odd.ps','-append'), end
 
@@ -155,7 +157,7 @@ doNR           = [];         % Naka-Rushton fitting - turned off for now, but ta
 % loop over harmonics and aggregate data!
 % note that the input and output is the same structure
 % you are simply modifying the structure, adding additional fields
-for f = 1:length(use_freqs)    
+for f = 1:length(rca_odd)    
     fprintf('\n ... Harmonic no. %0.0f ...\n',f);
     rca_odd(f) = aggregateData(rca_odd(f), keep_conditions, errorType, trialError, doNR);
     % called like this:
@@ -165,11 +167,23 @@ end
 
 %% INSPECT THE RCA STRUCT 
 h_idx = 1;
-fprintf('\n I am an rca struct, created on %s, using %s data from %.0d subjects, and %.0d conditions.', ...
+if strcmp(rca_odd(h_idx).settings.rcaSubs, 'all')
+    num_subs = 'all';
+else
+    num_subs = num2str(length(rca_odd(h_idx).settings.rcaSubs));
+end
+
+if strcmp(rca_odd(h_idx).settings.rcaConds, 'all')
+    num_conds = sprintf('all %d', num2str(size(rca_odd(h_idx).data, 1)));
+else
+    num_conds = num2str(length(rca_odd(h_idx).settings.rcaConds));
+end
+
+fprintf('\n I am an rca struct, created on %s, using %s data from %s subjects, and %s conditions. \n', ...
     rca_odd(h_idx).settings.runDate, ...
     rca_odd(h_idx).settings.dataType, ...
-    length(rca_odd(h_idx).settings.dataFolders), ...
-    length(rca_odd(h_idx).settings.rcaConds));
+    num_subs, ...
+    num_conds);
 
 rca_freqs = rca_odd(h_idx).settings.freqLabels(rca_odd(h_idx).settings.rcaFreqs);
 cur_freq = rca_odd(h_idx).settings.freqLabels{rca_odd(h_idx).settings.freqIndices};
@@ -180,25 +194,8 @@ end
 str_to_print = [str_to_print, sprintf(' and %s. This part of the array of structs contain data from %s.\n', rca_freqs{end}, cur_freq) ];
 fprintf('%s', str_to_print)
 
-%% FLIP and REORDER RCA TOPOGRAPHIES
-% For first harmonic
-h_idx = 1;
-
-% Flip the RCA component data
-rca_new = flipSwapRCA(rca_odd(h_idx), [2,1], 2);
-figure;
-subplot(2,2,1); hold on;
-mrC.plotOnEgi(rca_odd(h_idx).W(:,1))
-subplot(2,2,2); 
-mrC.plotOnEgi(rca_odd(h_idx).W(:,2))
-subplot(2,2,3); 
-mrC.plotOnEgi(rca_new.W(:,1))
-subplot(2,2,4); 
-mrC.plotOnEgi(rca_new.W(:,2))
-
 %% FIGURE PARAMS
-l_width = 2
-
+l_width = 2;
 
 %% PLOT ERROR ELLIPSE
 close all;
@@ -210,10 +207,12 @@ rc_idx = 1;
 % Specify which harmonic to plot (always 1)
 h_idx = 1;
 
+c_idx = 1;
+
 % Concatenate the real signal and the imaginary signal together 
 % (bin x harmonic x subject x condition)
-xy_vals = cat(2, squeeze(rca_odd(h_idx).subjects.real_signal(end, : , rc_idx, :)), ...
-                 squeeze(rca_odd(h_idx).subjects.imag_signal(end, :,  rc_idx, :)));
+xy_vals = cat(2, squeeze(rca_odd(h_idx).subjects.real_signal(end, : , rc_idx, :, c_idx)), ...
+                 squeeze(rca_odd(h_idx).subjects.imag_signal(end, :,  rc_idx, :, c_idx)));
 % Set na vals so they'll be ignored
 nan_vals = sum(isnan(xy_vals),2) > 0;
 
@@ -248,7 +247,7 @@ plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
 close all;
 rc_idx = 1;
 h_idx = 1;
-c_idx = 1;
+c_idx = 4;
 % Flip the RCA components and reorder them so component 1 becomes component
 % 2. rcaOut, newOrder, index of components to flip
 rca_new = rca_odd;
@@ -275,8 +274,8 @@ for z = 1:2
     hold off
     subplot(2,3,z+1+(z-1)*2)
     hold on
-    xy_vals = cat(2, squeeze(cur_rca(h_idx).subjects.real_signal(end, : , rc_idx, :)), ...
-        squeeze(cur_rca(h_idx).subjects.imag_signal(end, :,  rc_idx, :)));
+    xy_vals = cat(2, squeeze(cur_rca(h_idx).subjects.real_signal(end, : , rc_idx, :, c_idx)), ...
+        squeeze(cur_rca(h_idx).subjects.imag_signal(end, :,  rc_idx, :, c_idx)));
     nan_vals = sum(isnan(xy_vals),2) > 0;
     % compute ellipse based on standard deviation and standard error of the
     % mean - SEM is usually smaller and STD is usually bigger
@@ -311,19 +310,19 @@ for z = 1:2
     subplot(2,3,z+2+(z-1)*2)
     hold on
     axx_rca_full = axxRCAmake(folder_names, full_w);
-    x_vals = linspace(0,1,421);
+    x_vals = linspace(0,1,420+1);
     x_vals = x_vals(2:end); 
 
     % Define colors (red   green   blue)
-    colors = [1,0,0; 0,1,0; 0,0,1];
+    colors = [1,0,0; 0,1,0; 0,0,1; 0 1 1];
 
     axx_mean = nanmean(cell2mat(axx_rca_full.Projected(c_idx,:)),2);
     axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(c_idx,:)),0,2)./sqrt(length(folder_names));
-    ph(c_idx) = plot(x_vals, axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
+    ph(c_idx) = plot(x_vals(1:length(axx_mean)), axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
     ty_max = 25;
     ylim([-ty_max, ty_max])
     hold on; 
-    ErrorBars(x_vals', axx_mean, axx_stderr,'color',colors(c_idx,:));
+    ErrorBars(x_vals(1:length(axx_mean))', axx_mean, axx_stderr,'color',colors(c_idx,:));
 end
 
     
