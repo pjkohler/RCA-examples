@@ -78,7 +78,6 @@ folder_names = new_names; clear new_names;
 
 % this analysis is structured for Sweep analysis
 
-<<<<<<< HEAD
 binsToUse     = 1:10;          % Sweep indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 % binsToUse     = 0;           % Would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 freqsToUse    = [1 2];         % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
@@ -106,7 +105,8 @@ save_path = [out_location,'/',save_name]; % returns the full file path to your o
 launchAnalysis = false;
 if isempty(dir([save_path,'.mat'])) % if .mat file specified by saveFileNamePath does not exist, go ahead and run analysis
    launchAnalysis = true; 
-=======
+end
+
 %% Run on the first 3 conditions (all oddball)
 % (1) pseudo-fonts with word oddball
 % (2) pseudo-fonts with non-word oddball 
@@ -120,7 +120,7 @@ use_freqs = 1:2;       % indices of harmonics to include in analysis
                        % oddball, we are including only the first two
                        % harmonics of the oddball
                         
-use_conds = 1:3;       % if you want to include all conditions, create a vector here listing all condition numbers
+use_conds = 1;       % if you want to include all conditions, create a vector here listing all condition numbers
                        % only look at condition 1 first, if you want to look at all 3 conditions
 use_trials = [];
                        
@@ -132,9 +132,7 @@ data_type = 'RLS';     % can also be 'DFT' if you have DFT exports
 force_reload = false;  % if true, reload the data text files and generate
                        % new .mat files for quick loading of the data
                        % set to true if you have
-                       % re-exported the data from xDiva
->>>>>>> e7e0769e96b8e09d890b1b293fb93c3601d0ae1e
-    
+                       % re-exported the data from xDiva    
 rca_odd = rcaSweep(folder_names, use_bins, use_freqs, use_conds, use_trials, n_reg, n_comp, data_type, comp_channel, force_reload);
 
 if print_figures, print('-dpsc','~/Desktop/rca_odd.ps','-append'), end
@@ -166,7 +164,7 @@ for f = 1:length(use_freqs)
 end
 
 %% INSPECT THE RCA STRUCT 
-h_idx = 2;
+h_idx = 1;
 fprintf('\n I am an rca struct, created on %s, using %s data from %.0d subjects, and %.0d conditions.', ...
     rca_odd(h_idx).settings.runDate, ...
     rca_odd(h_idx).settings.dataType, ...
@@ -183,18 +181,20 @@ str_to_print = [str_to_print, sprintf(' and %s. This part of the array of struct
 fprintf('%s', str_to_print)
 
 %% FLIP and REORDER RCA TOPOGRAPHIES
+% For first harmonic
 h_idx = 1;
-rca_new = flipSwapRCA(rcaStruct(h_idx), [2,1], 2);
+
+% Flip the RCA component data
+rca_new = flipSwapRCA(rca_odd(h_idx), [2,1], 2);
 figure;
 subplot(2,2,1); hold on;
-mrC.plotOnEgi(rcaStruct(h_idx).W(:,1))
+mrC.plotOnEgi(rca_odd(h_idx).W(:,1))
 subplot(2,2,2); 
-mrC.plotOnEgi(rcaStruct(h_idx).W(:,2))
+mrC.plotOnEgi(rca_odd(h_idx).W(:,2))
 subplot(2,2,3); 
 mrC.plotOnEgi(rca_new.W(:,1))
 subplot(2,2,4); 
 mrC.plotOnEgi(rca_new.W(:,2))
-
 
 %% FIGURE PARAMS
 l_width = 2
@@ -206,22 +206,14 @@ figure
 % Specify which bin to plot (usually the average)
 bin_to_plot = 'ave';
 % Specify which RC component to plot
-rc_idx = 2;
+rc_idx = 1;
 % Specify which harmonic to plot (always 1)
 h_idx = 1;
 
-% Link the bin to plot to the bin index (11 corresponds to the average of
-% the 10 useable bins) 
-if bin_to_plot == 'ave'
-    b_idx = 11;
-else
-    b_idx = bin_to_plot;
-end
-
 % Concatenate the real signal and the imaginary signal together 
 % (bin x harmonic x subject x condition)
-xy_vals = cat(2, squeeze(rcaStruct(h_idx).subjects.real_signal(b_idx,:,rc_idx,:)), ...
-                 squeeze(rcaStruct(h_idx).subjects.imag_signal(b_idx,:,rc_idx,:)));
+xy_vals = cat(2, squeeze(rca_odd(h_idx).subjects.real_signal(end, : , rc_idx, :)), ...
+                 squeeze(rca_odd(h_idx).subjects.imag_signal(end, :,  rc_idx, :)));
 % Set na vals so they'll be ignored
 nan_vals = sum(isnan(xy_vals),2) > 0;
 
@@ -251,6 +243,133 @@ ylim([-y_max, y_max])
 axis square 
 plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
 plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
+
+%% %% %% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
+close all;
+rc_idx = 1;
+h_idx = 1;
+c_idx = 1;
+% Flip the RCA components and reorder them so component 1 becomes component
+% 2. rcaOut, newOrder, index of components to flip
+rca_new = rca_odd;
+
+for h = 1:length(use_freqs)
+    rca_new(h) = flipSwapRCA(rca_odd(h), [], rc_idx);
+    rca_new(h) = aggregateData(rca_new(h), keep_conditions, errorType, trialError, doNR);
+end
+
+% Ellipse parameters
+ellipseType = ['1STD' 'SEM'];
+
+figure;
+for z = 1:2
+    subplot(2,3,z+(z-1)*2); hold on;
+    if z == 1  
+        cur_rca = rca_odd;
+        full_w = rca_odd(h_idx).W(:,rc_idx);
+    else
+        cur_rca = rca_new;
+        full_w = rca_new(h_idx).W(:,rc_idx);
+    end
+    mrC.plotOnEgi(cur_rca(h_idx).W(:,rc_idx))
+    hold off
+    subplot(2,3,z+1+(z-1)*2)
+    hold on
+    xy_vals = cat(2, squeeze(cur_rca(h_idx).subjects.real_signal(end, : , rc_idx, :)), ...
+        squeeze(cur_rca(h_idx).subjects.imag_signal(end, :,  rc_idx, :)));
+    nan_vals = sum(isnan(xy_vals),2) > 0;
+    % compute ellipse based on standard deviation and standard error of the
+    % mean - SEM is usually smaller and STD is usually bigger
+    [~,~,~,std_ellipse] = fitErrorEllipse(xy_vals(~nan_vals,:),'1STD');
+    [~,~,~,sem_ellipse] = fitErrorEllipse(xy_vals(~nan_vals,:),'SEM');
+
+    % Project xy_vals into vector space
+    vector_means = nanmean(xy_vals);
+    % Plot ellipses
+    plot(sem_ellipse(:,1), sem_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');  
+    plot(std_ellipse(:,1), std_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
+
+    % Plot individual subject data 
+    plot(xy_vals(~nan_vals,1),xy_vals(~nan_vals,2),'sq','linewidth',l_width,'Color', 'g');
+
+    % Plot vector amplitude
+    p_h = plot([0 vector_means(1)],[0 vector_means(2)],'-','linewidth',l_width,'Color','b');
+
+    % Create grid based on scatter of data
+    % x_max = ceil(max(abs(xy_vals(~nan_vals,1))));
+    % y_max = ceil(max(abs(xy_vals(~nan_vals,2))));
+    x_max = 15;
+    y_max = 10;
+    xlim([-x_max, x_max])
+    ylim([-y_max, y_max])
+    axis square 
+    plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
+    plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
+    hold off
+    
+    %Plot time domain
+    subplot(2,3,z+2+(z-1)*2)
+    hold on
+    axx_rca_full = axxRCAmake(folder_names, full_w);
+    x_vals = linspace(0,1,421);
+    x_vals = x_vals(2:end); 
+
+    % Define colors (red   green   blue)
+    colors = [1,0,0; 0,1,0; 0,0,1];
+
+    axx_mean = nanmean(cell2mat(axx_rca_full.Projected(c_idx,:)),2);
+    axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(c_idx,:)),0,2)./sqrt(length(folder_names));
+    ph(c_idx) = plot(x_vals, axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
+    ty_max = 25;
+    ylim([-ty_max, ty_max])
+    hold on; 
+    ErrorBars(x_vals', axx_mean, axx_stderr,'color',colors(c_idx,:));
+end
+
+    
+%%
+
+
+
+    
+
+
+subplot(2, 2, 4)
+% Concatenate the real signal and the imaginary signal together 
+% (bin x harmonic x subject x condition)
+xy_new = cat(2, squeeze(rca_new(h).subjects.real_signal(end, : , rc_idx, :)), ...
+                 squeeze(rca_new(h).subjects.imag_signal(end, :,  rc_idx, :)));
+
+nan_new = sum(isnan(xy_new),2) > 0;
+
+% Compute ellipse based on standard deviation and standard error of the
+% mean - SEM is usually smaller and STD is usually bigger
+[~,~,~,std_ellipse] = fitErrorEllipse(xy_new(~nan_new,:),'1STD');
+[~,~,~,sem_ellipse] = fitErrorEllipse(xy_new(~nan_new,:),'SEM'); 
+
+
+% Project xy_vals into vector space
+new_vector_means = nanmean(xy_new);
+hold on
+% Plot ellipses
+plot(sem_ellipse(:,1), sem_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
+plot(std_ellipse(:,1), std_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
+
+% Plot individual subject data 
+plot(xy_new(~nan_new,1),xy_new(~nan_new,2),'sq','linewidth',l_width,'Color', 'g');
+
+% Plot vector amplitude
+p_h_new = plot([0 new_vector_means(1)],[0 new_vector_means(2)],'-','linewidth',l_width,'Color','b');
+
+% Create grid based on scatter of data
+new_x_max = ceil(max(abs(xy_new(~nan_new,1))));
+new_y_max = ceil(max(abs(xy_new(~nan_new,2))));
+xlim([-15, 15])
+ylim([-8, 8])
+axis square 
+plot([-15, 15], zeros(1,2), 'k-', 'linewidth',l_width)
+plot(zeros(1,2), [-8, 8], 'k-', 'linewidth',l_width)
+
 
 %% Pull out phase significance - another way 
 
@@ -303,6 +422,5 @@ for h  = 1:length(use_freqs)
 end
     
   
- 
 
-
+      
