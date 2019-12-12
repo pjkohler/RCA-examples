@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/kohler/code';
+    code_folder = '/Users/lindseyhasak/code/';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -58,7 +58,7 @@ fig_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/figures';
 % contains these.
 
 folder_names = subfolders(sprintf('%s/BLC*',data_location),1); % get full path of all sub folders
-sub_count = 0;
+sub_count = 0 
 for f = 1:length(folder_names)
     cur_folder = subfolders(sprintf('%s/*_EEGSsn', folder_names{f}),1);
     if cur_folder{1} ~= 0
@@ -82,7 +82,7 @@ binsToUse     = 1:10;          % Sweep indices of bins to include in analysis (t
 % binsToUse     = 0;           % Would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 freqsToUse    = [1 2];         % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
                                % Chose freq 1 and 2, because 3Hz is carrier, so you want nf1 clean
-condsToUse    = [1];           % if you want to include all conditions, create a vector here listing all condition numbers
+condsToUse    = [3];           % if you want to include all conditions, create a vector here listing all condition numbers
                                % only look at condition 1 first, if you want to look at all 3 conditions
                                % together, do [1 2 3]
 nReg          = 7;                          % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
@@ -120,7 +120,7 @@ use_freqs = 1:2;       % indices of harmonics to include in analysis
                        % oddball, we are including only the first two
                        % harmonics of the oddball
                         
-use_conds = 1;       % if you want to include all conditions, create a vector here listing all condition numbers
+use_conds = 1;         % if you want to include all conditions, create a vector here listing all condition numbers
                        % only look at condition 1 first, if you want to look at all 3 conditions
 use_trials = [];
 
@@ -247,7 +247,7 @@ plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
 close all;
 rc_idx = 1;
 h_idx = 1;
-c_idx = 4;
+c_idx = 1;
 % Flip the RCA components and reorder them so component 1 becomes component
 % 2. rcaOut, newOrder, index of components to flip
 rca_new = rca_odd;
@@ -265,12 +265,12 @@ for z = 1:2
     subplot(2,3,z+(z-1)*2); hold on;
     if z == 1  
         cur_rca = rca_odd;
-        full_w = rca_odd(h_idx).W(:,rc_idx);
+        full_w = rca_odd(h_idx).A(:,rc_idx);
     else
         cur_rca = rca_new;
-        full_w = rca_new(h_idx).W(:,rc_idx);
+        full_w = rca_new(h_idx).A(:,rc_idx);
     end
-    mrC.plotOnEgi(cur_rca(h_idx).W(:,rc_idx))
+    mrC.plotOnEgi(cur_rca(h_idx).A(:,rc_idx))
     hold off
     subplot(2,3,z+1+(z-1)*2)
     hold on
@@ -305,7 +305,7 @@ for z = 1:2
     plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
     plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
     hold off
-    
+
     %Plot time domain
     subplot(2,3,z+2+(z-1)*2)
     hold on
@@ -384,7 +384,8 @@ squeeze(rcaStruct(1).stats.t2_sig(:, 1, :))
 %% LOAD IN AXX DATA AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
 close all;
 rc_idx = 2;
-full_w = rca_new.W(:,rc_idx);
+h_idx = 1;
+full_w = rca_new(h_idx).A(:,rc_idx);
 axx_rca_full = axxRCAmake(folder_names, full_w);
 
 x_vals = linspace(0,1,421);
