@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/lindseyhasak/code/';
+    code_folder = '/Users/kohler/code/';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -58,7 +58,7 @@ fig_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/figures';
 % contains these.
 
 folder_names = subfolders(sprintf('%s/BLC*',data_location),1); % get full path of all sub folders
-sub_count = 0 
+sub_count = 0; 
 for f = 1:length(folder_names)
     cur_folder = subfolders(sprintf('%s/*_EEGSsn', folder_names{f}),1);
     if cur_folder{1} ~= 0
@@ -181,7 +181,7 @@ end
 
 fprintf('\n I am an rca struct, created on %s, using %s data from %s subjects, and %s conditions. \n', ...
     rca_odd(h_idx).settings.runDate, ...
-    rca_odd(h_idx).settings.dataType, ...
+    rca_odd(h_idx).settings.data_type, ...
     num_subs, ...
     num_conds);
 
@@ -195,7 +195,10 @@ str_to_print = [str_to_print, sprintf(' and %s. This part of the array of struct
 fprintf('%s', str_to_print)
 
 %% FIGURE PARAMS
-l_width = 2;
+l_width = 1;
+f_size = 12;
+text_opts = {'fontweight','normal','fontname','Helvetica','fontsize', f_size};
+gca_opts = [{'tickdir','out','ticklength',[0.0200,0.0200],'box','off','linewidth',l_width}, text_opts];
 
 %% PLOT ERROR ELLIPSE
 close all;
@@ -242,7 +245,7 @@ ylim([-y_max, y_max])
 axis square 
 plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
 plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
-
+set(gca, gca_opts{:});
 %% %% %% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
 close all;
 rc_idx = 1;
@@ -256,26 +259,56 @@ for h = 1:length(use_freqs)
     rca_new(h) = flipSwapRCA(rca_odd(h), [], rc_idx);
     rca_new(h) = aggregateData(rca_new(h), keep_conditions, errorType, trialError, doNR);
 end
-
+%% PLOT IT!
 % Ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
 figure;
-for z = 1:2
-    subplot(2,3,z+(z-1)*2); hold on;
+set(gcf, 'units', 'centimeters'); 
+fig_x = 40; fig_y = 40;
+fig_pos = get(gcf, 'position');
+fig_pos(3:4) = [fig_x, fig_y];
+fig_pos = set(gcf, 'position', fig_pos);
+
+num_rows = 3;
+num_cols = 3;
+x_max = 30;
+y_max = 10;
+for z = 1:num_rows
     if z == 1  
         cur_rca = rca_odd;
-        full_w = rca_odd(h_idx).A(:,rc_idx);
+        cur_idx = rc_idx;
+        cur_w = rca_odd(h_idx).A(:,cur_idx);
+    elseif z == 2
+        cur_rca = rca_new;
+        cur_idx = rc_idx;
+        cur_w = rca_new(h_idx).A(:,cur_idx);
     else
         cur_rca = rca_new;
-        full_w = rca_new(h_idx).A(:,rc_idx);
+        cur_idx = n_comp + 1; % comparison channel
+        n_electrodes = size(rca_odd(h_idx).W, 1);
+        cur_w = zeros(n_electrodes,1); cur_w(chanToCompare) = 1; 
+        x_max = 5;
+        y_max = 2;
     end
-    mrC.plotOnEgi(cur_rca(h_idx).A(:,rc_idx))
-    hold off
-    subplot(2,3,z+1+(z-1)*2)
+    if z < 3
+        % plot topographies
+        subplot(num_rows, num_cols, 1+(z-1)*num_cols); hold on;
+        mrC.plotOnEgi(cur_rca(h_idx).A(:,cur_idx))
+        set(gca, gca_opts{:});
+        hold off
+    else
+        subplot(num_rows, num_cols, 1+(z-1)*num_cols); hold on;
+        mrC.plotOnEgi(ones(n_electrodes, 1)*.5, [], [], chanToCompare, true);
+        colormap(gca, 'gray');
+        set(gca, gca_opts{:});
+        hold off
+    end
+    % plot frequency domain ellipse plots
+    subplot(num_rows, num_cols, 2+(z-1)*num_cols)
     hold on
-    xy_vals = cat(2, squeeze(cur_rca(h_idx).subjects.real_signal(end, : , rc_idx, :, c_idx)), ...
-        squeeze(cur_rca(h_idx).subjects.imag_signal(end, :,  rc_idx, :, c_idx)));
+    xy_vals = cat(2, squeeze(cur_rca(h_idx).subjects.real_signal(end, : , cur_idx, :, c_idx)), ...
+        squeeze(cur_rca(h_idx).subjects.imag_signal(end, :,  cur_idx, :, c_idx)));
     nan_vals = sum(isnan(xy_vals),2) > 0;
     % compute ellipse based on standard deviation and standard error of the
     % mean - SEM is usually smaller and STD is usually bigger
@@ -297,19 +330,19 @@ for z = 1:2
     % Create grid based on scatter of data
     % x_max = ceil(max(abs(xy_vals(~nan_vals,1))));
     % y_max = ceil(max(abs(xy_vals(~nan_vals,2))));
-    x_max = 15;
-    y_max = 10;
+    
     xlim([-x_max, x_max])
     ylim([-y_max, y_max])
     axis square 
     plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
     plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
+    set(gca, gca_opts{:});
     hold off
 
     %Plot time domain
-    subplot(2,3,z+2+(z-1)*2)
+    subplot(num_cols, num_rows, 3+(z-1)*num_cols)
     hold on
-    axx_rca_full = axxRCAmake(folder_names, full_w);
+    axx_rca_full = axxRCAmake(folder_names, cur_w);
     x_vals = linspace(0,1,420+1);
     x_vals = x_vals(2:end); 
 
@@ -323,6 +356,7 @@ for z = 1:2
     ylim([-ty_max, ty_max])
     hold on; 
     ErrorBars(x_vals(1:length(axx_mean))', axx_mean, axx_stderr,'color',colors(c_idx,:));
+    set(gca, gca_opts{:});
 end
 
     
@@ -385,8 +419,8 @@ squeeze(rcaStruct(1).stats.t2_sig(:, 1, :))
 close all;
 rc_idx = 2;
 h_idx = 1;
-full_w = rca_new(h_idx).A(:,rc_idx);
-axx_rca_full = axxRCAmake(folder_names, full_w);
+cur_w = rca_new(h_idx).A(:,rc_idx);
+axx_rca_full = axxRCAmake(folder_names, cur_w);
 
 x_vals = linspace(0,1,421);
 x_vals = x_vals(2:end); 
