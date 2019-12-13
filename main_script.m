@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/kohler/code/';
+    code_folder = '/Users/lindseyhasak/code/';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -120,7 +120,7 @@ use_freqs = 1:2;       % indices of harmonics to include in analysis
                        % oddball, we are including only the first two
                        % harmonics of the oddball
                         
-use_conds = 1;         % if you want to include all conditions, create a vector here listing all condition numbers
+use_conds = 3;         % if you want to include all conditions, create a vector here listing all condition numbers
                        % only look at condition 1 first, if you want to look at all 3 conditions
 use_trials = [];
 
@@ -300,7 +300,9 @@ for z = 1:num_rows
     else
         subplot(num_rows, num_cols, 1+(z-1)*num_cols); hold on;
         mrC.plotOnEgi(ones(n_electrodes, 1)*.5, [], [], chanToCompare, true);
-        colormap(gca, 'gray');
+%         cube = colorcube; 
+%         cube = cube(250, :);
+        colormap(gca, gray);
         set(gca, gca_opts{:});
         hold off
     end
@@ -352,7 +354,7 @@ for z = 1:num_rows
     axx_mean = nanmean(cell2mat(axx_rca_full.Projected(c_idx,:)),2);
     axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(c_idx,:)),0,2)./sqrt(length(folder_names));
     ph(c_idx) = plot(x_vals(1:length(axx_mean)), axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
-    ty_max = 25;
+    ty_max = 50;
     ylim([-ty_max, ty_max])
     hold on; 
     ErrorBars(x_vals(1:length(axx_mean))', axx_mean, axx_stderr,'color',colors(c_idx,:));
@@ -361,11 +363,6 @@ end
 
     
 %%
-
-
-
-    
-
 
 subplot(2, 2, 4)
 % Concatenate the real signal and the imaginary signal together 
@@ -407,17 +404,17 @@ plot(zeros(1,2), [-8, 8], 'k-', 'linewidth',l_width)
 %% Pull out phase significance - another way 
 
 % Shows average t_sig for each component for the first harmonic
-squeeze(rcaStruct(1).stats.t_sig(end, 1, :));
+squeeze(rca_odd(1).stats.t_sig(end, 1, :));
 
 % Shows average t2_sig for each component for the first harmonic
 squeeze(rcaStruct(1).stats.t2_sig(end, 1, :));
 
 % Can also look at this bin-by-bin
-squeeze(rcaStruct(1).stats.t2_sig(:, 1, :))
+squeeze(rca_odd(1).stats.t2_sig(:, 1, :))
 
 %% LOAD IN AXX DATA AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
 close all;
-rc_idx = 2;
+rc_idx = 1;
 h_idx = 1;
 cur_w = rca_new(h_idx).A(:,rc_idx);
 axx_rca_full = axxRCAmake(folder_names, cur_w);
@@ -447,7 +444,7 @@ comp_n = [1 2 3 4 5 6]
 for h  = 1:length(use_freqs)
     for c = 1:length(nComp)
     % Find the mean amplitude of each component 
-    curr_amp = rcaStruct(h).mean.amp_signal(end, : , c); %currently just for 
+    curr_amp = rca_odd(h).mean.amp_signal(end, : , c); %currently just for 
     curr_errlo = rcaStruct(h).stats.amp_lo_err(end, : , c);
     curr_errhi = rcaStruct(h).stats.amp_up_err(end, : , c);
     end
