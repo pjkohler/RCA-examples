@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/kohler/code/';
+    code_folder = '/Users/lindseyhasak/code/';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -43,7 +43,7 @@ end
 %% Set up some analysis parameters and variables
 
 print_figures  = true;                                                                             % set to true if you want to automatically print the rca topo figures and save them into the'outputs' directory
-save_name  = 'rcaData_Lochy_Cond3';    % name of output                                            % set to the desired ouput file name - this will contain one big data struct with the results from rcaSweep
+save_name  = 'rcaData_Lochy_Cond1';    % name of output                                            % set to the desired ouput file name - this will contain one big data struct with the results from rcaSweep
 
 data_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data'; % change to your data directory
 out_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/outputs';     % set to your output directory
@@ -71,42 +71,6 @@ folder_names = new_names; clear new_names;
 
 % variable 'pathnames' should now contain all of the relevant directories
 
-% Now we can set some more analysis-specific variables. For this part it is
-% important to know how you want to analyse your data - i.e. how do you
-% want the RCA filters to be constructed? Do you want to include all
-% conditions, and all harmonics to analyse?
-
-% this analysis is structured for Sweep analysis
-
-binsToUse     = 1:10;          % Sweep indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-% binsToUse     = 0;           % Would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-freqsToUse    = [1 2];         % indices of frequencies to include in analysis (the values must be present in the frequency column of all DFT/RLS exports)... these freq were set when importing eegssn
-                               % Chose freq 1 and 2, because 3Hz is carrier, so you want nf1 clean
-condsToUse    = [3];           % if you want to include all conditions, create a vector here listing all condition numbers
-                               % only look at condition 1 first, if you want to look at all 3 conditions
-                               % together, do [1 2 3]
-nReg          = 7;                          % RCA regularization constant (7-9 are typical values, but see within-trial eigenvalue plot in rca output); should always be bigger than the number of components. 
-%trialsToUse   = [:];                       % which trials do you want to use? I've commented here so that it defaults to all trials it can find for each participant.
-nComp         = 6;                          % number of RCs that you want to look at (3-5 are good values, but see across-trial eigenvalue plot in rca output)
-chanToCompare = 65;                         % channel to use for a performance evaluation, we typically use 75 but should be determined on the basis of a representative 'good electrode' for your study - we use this just as a sanity check
-dataType      = 'RLS';                      % can also be 'DFT' if you have DFT exports
-
-rcPlotStyle = 'matchMaxSignsToRc1';         % not req'd. see 'help rcaRun', can be: 'matchMaxSignsToRc1' (default) or 'orig'
-
-forceSourceData = 0;                        % set to true if you have source space; we didn't do this in our study
-
-%% Run individual level RCA
-% Hopefully, you won't need to change anything in this section
-
-save_path = [out_location,'/',save_name]; % returns the full file path to your output folder
-
-% Run some checks - have you analysed before / does the output file already
-% exist?
-launchAnalysis = false;
-if isempty(dir([save_path,'.mat'])) % if .mat file specified by saveFileNamePath does not exist, go ahead and run analysis
-   launchAnalysis = true; 
-end
-
 %% Run on the first 3 conditions (all oddball)
 % (1) pseudo-fonts with word oddball
 % (2) pseudo-fonts with non-word oddball 
@@ -120,7 +84,7 @@ use_freqs = 1:2;       % indices of harmonics to include in analysis
                        % oddball, we are including only the first two
                        % harmonics of the oddball
                         
-use_conds = 3;         % if you want to include all conditions, create a vector here listing all condition numbers
+use_conds = 1;         % if you want to include all conditions, create a vector here listing all condition numbers
                        % only look at condition 1 first, if you want to look at all 3 conditions
 use_trials = [];
 
@@ -254,21 +218,24 @@ plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
 set(gca, gca_opts{:});
 %% %% %% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
 close all;
+% set parameters
 rc_idx = 1;
 h_idx = 1;
 c_idx = 1;
-% Flip the RCA components and reorder them so component 1 becomes component
-% 2. rcaOut, newOrder, index of components to flip
+
+% create rca_new struct to be flipped
 rca_new = rca_odd;
 
+% flip rca components and data
 for h = 1:length(use_freqs)
     rca_new(h) = flipSwapRCA(rca_odd(h), [], rc_idx);
     rca_new(h) = aggregateData(rca_new(h), keep_conditions, errorType, trialError, doNR);
 end
 %% PLOT IT!
-% Ellipse parameters
+% ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
+% set figure parameters
 figure;
 set(gcf, 'units', 'centimeters'); 
 fig_x = 40; fig_y = 40;
@@ -379,15 +346,26 @@ end
 %squeeze(rca_odd(1).stats.t2_sig(:, 1, :))
 
 %% LOAD IN AXX DATA
+% set parameters
 rc_idx = 1;
 h_idx = 1;
-cur_w = rca_new(h_idx).A(:,rc_idx);
-axx_rca_full = rcaWaveProject(folder_names, cur_w);
 conds_to_compare = [1, 3];
+cur_w = rca_new(h_idx).A(:,rc_idx);
+
+% make axxRCA struct 
+axx_rca_full = rcaWaveProject(folder_names, cur_w);
+
+% reorganize structure to take the difference of the waveforms 
 diff_comp = cell2mat(permute(axx_rca_full.rcaWave(conds_to_compare,:),[3,2,1]));
 diff_comp = diff_comp(:,:,1) - diff_comp(:,:,2);
+
+% set max number of permutations 
 n_perms = 50000;
-test_stat = 'size';
+
+% choose type of test statistic - size, height, or mass - mass accounts for length & amplitude
+test_stat = 'mass'; 
+ 
+% run the ttest_permute_sstats function
 [realH, realP, realT, corrH, critVal, supraThr, clustDistrib ]= ttest_permute_sstats(diff_comp, n_perms, test_stat);
 
 %% ...  AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
@@ -397,21 +375,24 @@ close all;
 p_colormap = jmaColors('pval');
 p_colormap(end,:) = [1 1 1];
 
+% set parameters
 axx_xvals = linspace(0,1,421);
 axx_xvals = axx_xvals(2:end); 
+axx_yunit = 4; axx_ymin = -80; axx_ymax = 80;
+axx_xmin = 0; axx_xmax = max(axx_xvals);
 
-axx_yunit = 4; axx_ymin = -50; axx_ymax = 50;
-axx_xmin = 0;
-axx_xmax = max(axx_xvals);
 sig_pos(1) = axx_ymax;
-sig_pos(2) = axx_ymax-( axx_ymax-axx_ymin) *.05; 
+sig_pos(2) = axx_ymax -( axx_ymax-axx_ymin) *.05; 
 
 % red   green   blue
 colors = [1,0,0; 0,1,0; 0,0,1];
 
 figure;
 hold on;
+% plot line at 0
 plot([axx_xmin, axx_xmax], zeros(2,1), 'k-', 'linewidth', l_width)
+
+% plot averaged waveforms from each condition and standard errors
 for c = 1:length(conds_to_compare) % All conditions except Vernier
     axx_mean = nanmean(cell2mat(axx_rca_full.rcaWave(conds_to_compare(c),:)),2);
     axx_stderr = nanstd(cell2mat(axx_rca_full.rcaWave(conds_to_compare(c),:)),0,2)./sqrt(length(folder_names));
@@ -436,16 +417,21 @@ set( gca, 'CLim', [ 0 c_mapmax ] ); % set range for color scale
 set(gca, gca_opts{:});
 uistack(h_img,'bottom')
 
-xlim([axx_xmin, axx_xmax]);
-ylim([axx_ymin, axx_ymax]);
+% plot averaged difference of conditions
 diff_mean = nanmean(diff_comp,2);
 plot(x_vals, diff_mean, '-', 'linewidth', 2, 'color', colors(c+1,:));
-legend(ph, '\itcondition 1', '\itcondition 2', '\itcondition 3', text_opts{:}, 'box', 'off');
+
+% specify plot limits and legend
+cond_labels = arrayfun(@(x) ['\itcondition ', num2str(x)], conds_to_compare, 'uni', false);
+xlim([axx_xmin, axx_xmax]);
+ylim([axx_ymin, axx_ymax]);
+legend(ph, cond_labels, text_opts{:}, 'box', 'off');
 set(gca, gca_opts{:}); 
 
 hold off
 
 %% COMPARE CONDITIONS IN THE FREQUENCY DOMAIN
+% set parameters
 rc_idx = 1;
 bin_idx = 11;
 h_idx = 4;
@@ -462,24 +448,26 @@ combined_data = cat(3, real_data, imag_data);
 combined_data = permute(combined_data, [1,3,2]);
 t2results = tSquaredFourierCoefs(combined_data);
 
-fprintf('\ncomparing conditions %d and %d \n-> student''s t-test: p = %.3f \n-> Hotelling''s t2: p = %.3f \n\n', ...
-    conds_to_compare(1), conds_to_compare(2), project_P, t2results.pVal);
+% create output of results
+fprintf('\ncomparing conditions %d and %d\n', conds_to_compare(1), conds_to_compare(2));  
+fprintf('-> student''s t-test: t(%d) = %.3f, p = %.3f\n', temp_stats.df, temp_stats.tstat, project_P);
+fprintf('-> Hotelling''s t2: t2(%d, %d) = %.3f, p = %.3f \n\n', t2results.df1, t2results.df2, t2results.tSqrd, t2results.pVal)
 
 %% Component amplitude plot - in progress
 
-comp_n = [1 2 3 4 5 6]
-
-
-for h  = 1:length(use_freqs)
-    for c = 1:length(nComp)
-    % Find the mean amplitude of each component 
-    curr_amp = rca_odd(h).mean.amp_signal(end, : , c); %currently just for 
-    curr_errlo = rcaStruct(h).stats.amp_lo_err(end, : , c);
-    curr_errhi = rcaStruct(h).stats.amp_up_err(end, : , c);
-    end
-    plot(comp_n, curr_amp);
-    
-end
+% comp_n = [1 2 3 4 5 6]
+% 
+% 
+% for h  = 1:length(use_freqs)
+%     for c = 1:length(nComp)
+%     % Find the mean amplitude of each component 
+%     curr_amp = rca_odd(h).mean.amp_signal(end, : , c); %currently just for 
+%     curr_errlo = rca_odd(h).stats.amp_lo_err(end, : , c);
+%     curr_errhi = rca_odd(h).stats.amp_up_err(end, : , c);
+%     end
+%     bar(comp_n, curr_amp);
+%     
+% end
     
   
 
