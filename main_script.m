@@ -30,7 +30,7 @@ clear all; close all; clc;
 
 % Add the RCA toolboxes
 if ~exist('code_folder','var')
-    code_folder = '/Users/lindseyhasak/code/';
+    code_folder = '/Users/kohler/code/';
     addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
     addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
@@ -113,7 +113,7 @@ end
 % (3) non-words with word oddball
 
 use_bins = 0;          % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-%use_bins = 1:10;      % would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
+%use_bins = [0, 2, 3, 7, 9];      % would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 use_freqs = 1:2;       % indices of harmonics to include in analysis 
                        % these will index the harmonics present in the DFT/RLS export
                        % Because 3Hz is the carrier, and 1 Hz is the
@@ -134,8 +134,14 @@ data_type = 'RLS';     % can also be 'DFT' if you have DFT exports
 force_reload = false;  % if true, reload the data text files and generate
                        % new .mat files for quick loading of the data
                        % set to true if you have
-                       % re-exported the data from xDiva    
-rca_odd = rcaSweep(folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload);
+                       % re-exported the data from xDiva
+                       
+return_all = true;    % if true (the default) returns data from of the data in the dataset,
+                       % all bins, harmonics, conditions, subjects, trials,
+                       % regardless of what subset of the data rca has been
+                       % trained on
+rca_odd = rcaSweep...
+    (folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload, return_all);
 
 if print_figures, print('-dpsc','~/Desktop/rca_odd.ps','-append'), end
 
@@ -198,7 +204,7 @@ fprintf('%s', str_to_print)
 l_width = 1;
 f_size = 12;
 text_opts = {'fontweight','normal','fontname','Helvetica','fontsize', f_size};
-gca_opts = [{'tickdir','out','ticklength',[0.0200,0.0200],'box','off','linewidth',l_width}, text_opts];
+gca_opts = [{'tickdir','out','ticklength',[0.0200,0.0200],'box','off','linewidth',l_width, 'clipping', 'off'}, text_opts];
 
 %% PLOT ERROR ELLIPSE
 close all;
@@ -294,7 +300,7 @@ for z = 1:num_rows
     if z < 3
         % plot topographies
         subplot(num_rows, num_cols, 1+(z-1)*num_cols); hold on;
-        mrC.plotOnEgi(cur_rca(h_idx).A(:,cur_idx))
+        mrC.plotOnEgi(cur_rca(h_idx).A(:,cur_idx));
         set(gca, gca_opts{:});
         hold off
     else
@@ -344,15 +350,15 @@ for z = 1:num_rows
     %Plot time domain
     subplot(num_cols, num_rows, 3+(z-1)*num_cols)
     hold on
-    axx_rca_full = axxRCAmake(folder_names, cur_w);
+    axx_rca_full = rcaWaveProject(folder_names, cur_w);
     x_vals = linspace(0,1,420+1);
     x_vals = x_vals(2:end); 
 
     % Define colors (red   green   blue)
     colors = [1,0,0; 0,1,0; 0,0,1; 0 1 1];
 
-    axx_mean = nanmean(cell2mat(axx_rca_full.Projected(c_idx,:)),2);
-    axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(c_idx,:)),0,2)./sqrt(length(folder_names));
+    axx_mean = nanmean(cell2mat(axx_rca_full.rcaWave(c_idx,:)),2);
+    axx_stderr = nanstd(cell2mat(axx_rca_full.rcaWave(c_idx,:)),0,2)./sqrt(length(folder_names));
     ph(c_idx) = plot(x_vals(1:length(axx_mean)), axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
     ty_max = 50;
     ylim([-ty_max, ty_max])
@@ -361,80 +367,103 @@ for z = 1:num_rows
     set(gca, gca_opts{:});
 end
 
-    
-%%
-
-subplot(2, 2, 4)
-% Concatenate the real signal and the imaginary signal together 
-% (bin x harmonic x subject x condition)
-xy_new = cat(2, squeeze(rca_new(h).subjects.real_signal(end, : , rc_idx, :)), ...
-                 squeeze(rca_new(h).subjects.imag_signal(end, :,  rc_idx, :)));
-
-nan_new = sum(isnan(xy_new),2) > 0;
-
-% Compute ellipse based on standard deviation and standard error of the
-% mean - SEM is usually smaller and STD is usually bigger
-[~,~,~,std_ellipse] = fitErrorEllipse(xy_new(~nan_new,:),'1STD');
-[~,~,~,sem_ellipse] = fitErrorEllipse(xy_new(~nan_new,:),'SEM'); 
-
-
-% Project xy_vals into vector space
-new_vector_means = nanmean(xy_new);
-hold on
-% Plot ellipses
-plot(sem_ellipse(:,1), sem_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
-plot(std_ellipse(:,1), std_ellipse(:,2),'-','linewidth',l_width,'Color', 'r');
-
-% Plot individual subject data 
-plot(xy_new(~nan_new,1),xy_new(~nan_new,2),'sq','linewidth',l_width,'Color', 'g');
-
-% Plot vector amplitude
-p_h_new = plot([0 new_vector_means(1)],[0 new_vector_means(2)],'-','linewidth',l_width,'Color','b');
-
-% Create grid based on scatter of data
-new_x_max = ceil(max(abs(xy_new(~nan_new,1))));
-new_y_max = ceil(max(abs(xy_new(~nan_new,2))));
-xlim([-15, 15])
-ylim([-8, 8])
-axis square 
-plot([-15, 15], zeros(1,2), 'k-', 'linewidth',l_width)
-plot(zeros(1,2), [-8, 8], 'k-', 'linewidth',l_width)
-
-
 %% Pull out phase significance - another way 
 
 % Shows average t_sig for each component for the first harmonic
-squeeze(rca_odd(1).stats.t_sig(end, 1, :));
+%squeeze(rca_odd(1).stats.t_sig(end, 1, :));
 
 % Shows average t2_sig for each component for the first harmonic
-squeeze(rcaStruct(1).stats.t2_sig(end, 1, :));
+%squeeze(rcaStruct(1).stats.t2_sig(end, 1, :));
 
 % Can also look at this bin-by-bin
-squeeze(rca_odd(1).stats.t2_sig(:, 1, :))
+%squeeze(rca_odd(1).stats.t2_sig(:, 1, :))
 
-%% LOAD IN AXX DATA AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
-close all;
+%% LOAD IN AXX DATA
 rc_idx = 1;
 h_idx = 1;
 cur_w = rca_new(h_idx).A(:,rc_idx);
-axx_rca_full = axxRCAmake(folder_names, cur_w);
+axx_rca_full = rcaWaveProject(folder_names, cur_w);
+conds_to_compare = [1, 3];
+diff_comp = cell2mat(permute(axx_rca_full.rcaWave(conds_to_compare,:),[3,2,1]));
+diff_comp = diff_comp(:,:,1) - diff_comp(:,:,2);
+n_perms = 50000;
+test_stat = 'size';
+[realH, realP, realT, corrH, critVal, supraThr, clustDistrib ]= ttest_permute_sstats(diff_comp, n_perms, test_stat);
 
-x_vals = linspace(0,1,421);
-x_vals = x_vals(2:end); 
+%% ...  AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
+close all;
+
+% significance colors
+p_colormap = jmaColors('pval');
+p_colormap(end,:) = [1 1 1];
+
+axx_xvals = linspace(0,1,421);
+axx_xvals = axx_xvals(2:end); 
+
+axx_yunit = 4; axx_ymin = -50; axx_ymax = 50;
+axx_xmin = 0;
+axx_xmax = max(axx_xvals);
+sig_pos(1) = axx_ymax;
+sig_pos(2) = axx_ymax-( axx_ymax-axx_ymin) *.05; 
 
 % red   green   blue
 colors = [1,0,0; 0,1,0; 0,0,1];
 
-figure; clf
-for c = 1:(size(axx_rca_full.Projected,1)-1) % All conditions except Vernier
-    axx_mean = nanmean(cell2mat(axx_rca_full.Projected(c,:)),2);
-    axx_stderr = nanstd(cell2mat(axx_rca_full.Projected(c,:)),0,2)./sqrt(length(folder_names));
-    ph(c) = plot(x_vals, axx_mean, '-', 'linewidth', 2, 'color', colors(c,:));
-    hold on; 
-    ErrorBars(x_vals', axx_mean, axx_stderr,'color',colors(c,:));
+figure;
+hold on;
+plot([axx_xmin, axx_xmax], zeros(2,1), 'k-', 'linewidth', l_width)
+for c = 1:length(conds_to_compare) % All conditions except Vernier
+    axx_mean = nanmean(cell2mat(axx_rca_full.rcaWave(conds_to_compare(c),:)),2);
+    axx_stderr = nanstd(cell2mat(axx_rca_full.rcaWave(conds_to_compare(c),:)),0,2)./sqrt(length(folder_names));
+    ph(c) = plot(axx_xvals, axx_mean, '-', 'linewidth', l_width, 'color', colors(c,:));
+    ErrorBars(axx_xvals', axx_mean, axx_stderr,'color',colors(c,:));
 end
 
-legend(ph, 'Condition 1', 'Condition 2', 'Condition 3');
+% plot corrected t-values
+regionIdx = bwlabel(corrH);
+for m=1:max(regionIdx)
+    tmp = regionprops(regionIdx == m,'centroid');
+    idx = round(tmp.Centroid(2));
+    hTxt = text(axx_xvals(idx), sig_pos(1),'*','fontsize',36,'fontname','Helvetica','horizontalalignment','center','verticalalignment','cap');
+end
+
+% plot uncorrected t-values
+cur_p = repmat( realP', 20,1 );
+h_img = image([min(axx_xvals),max(axx_xvals)],[sig_pos(1),sig_pos(2)], cur_p, 'CDataMapping', 'scaled','Parent',gca);
+colormap( gca, p_colormap );   
+c_mapmax = .05+2*.05/(size(p_colormap,1));
+set( gca, 'CLim', [ 0 c_mapmax ] ); % set range for color scale
+set(gca, gca_opts{:});
+uistack(h_img,'bottom')
+
+xlim([axx_xmin, axx_xmax]);
+ylim([axx_ymin, axx_ymax]);
+diff_mean = nanmean(diff_comp,2);
+plot(x_vals, diff_mean, '-', 'linewidth', 2, 'color', colors(c+1,:));
+legend(ph, '\itcondition 1', '\itcondition 2', '\itcondition 3', text_opts{:}, 'box', 'off');
+set(gca, gca_opts{:}); 
+
+hold off
+
+%% COMPARE CONDITIONS IN THE FREQUENCY DOMAIN
+rc_idx = 1;
+bin_idx = 11;
+h_idx = 4;
+conds_to_compare = [1, 3];
+
+% run student's t-test on projected amplitudes
+project_data = squeeze(rca_odd(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+[project_T, project_P, ci, temp_stats] = ttest(project_data(:,1), project_data(:,2), 'dim', 1, 'tail', 'both');
+
+% run Hotelling's T-squared test using real and imaginary values
+real_data = squeeze(rca_odd(h_idx).subjects.real_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+imag_data = squeeze(rca_odd(h_idx).subjects.imag_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+combined_data = cat(3, real_data, imag_data);
+combined_data = permute(combined_data, [1,3,2]);
+t2results = tSquaredFourierCoefs(combined_data);
+
+fprintf('\ncomparing conditions %d and %d \n-> student''s t-test: p = %.3f \n-> Hotelling''s t2: p = %.3f \n\n', ...
+    conds_to_compare(1), conds_to_compare(2), project_P, t2results.pVal);
 
 %% Component amplitude plot - in progress
 
