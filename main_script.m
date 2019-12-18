@@ -26,28 +26,30 @@
 %% Clean up and add toolboxes to Matlab search path 
 
 % Housekeeping
-clear all; close all; clc;
+close all; clc;
+
+% ! change the variables below to point to your git and data folder !
+data_location = 'C:\Users\fangwang\Desktop\Lochy_RCA';
+git_folder = 'C:\Users\fangwang\code\git';
 
 % Add the RCA toolboxes
-if ~exist('code_folder','var')
-    code_folder = '/Users/lindseyhasak/code/';
-    addpath(genpath(sprintf('%s/git/export_fig',code_folder)),'-end');
-    addpath(genpath(sprintf('%s/git/rcaBase',code_folder)),'-end');
-    addpath(genpath(sprintf('%s/git/mrC',code_folder)),'-end');
-    addpath(genpath(sprintf('%s/git/schlegel/matlab_lib/misc',code_folder)),'-end');
-    addpath(genpath(sprintf('%s/git/schlegel/matlab_lib/figure',code_folder)),'-end');
+if isempty(which('rcaRun'))
+    addpath(genpath(fullfile(git_folder, 'export_fig')),'-end');
+    addpath(genpath(fullfile(git_folder, 'rcaBase')),'-end');
+    addpath(genpath(fullfile(git_folder, 'mrC')),'-end');
+    addpath(genpath(fullfile(git_folder, 'matlab_lib', 'misc')),'-end');
+    addpath(genpath(fullfile(git_folder, 'matlab_lib', 'figures')),'-end');
 else
 end
-
 
 %% Set up some analysis parameters and variables
 
 print_figures  = true;                                                                             % set to true if you want to automatically print the rca topo figures and save them into the'outputs' directory
 save_name  = 'rcaData_Lochy_Cond1';    % name of output                                            % set to the desired ouput file name - this will contain one big data struct with the results from rcaSweep
 
-data_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data'; % change to your data directory
-out_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/outputs';     % set to your output directory
-fig_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/figures';   
+ % change to your data directory
+out_location = fullfile(data_location, 'outputs');     % set to your output directory
+fig_location = fullfile(data_location, 'figures');    
 
 % This loop will find all the the exported data folders in your data
 % directory. Note I assume that all relevant folders start with the nl-
@@ -57,17 +59,23 @@ fig_location = '/Volumes/Seagate Backup Plus Drive/2019_synapse_data/figures';
 % participants' dataset. So, we need to write out a cell array that
 % contains these.
 
-folder_names = subfolders(sprintf('%s/BLC*',data_location),1); % get full path of all sub folders
-sub_count = 0; 
+if ispc
+    file_sep = '\';
+else
+    file_sep = '/';
+end
+
+folder_names = subfolders(sprintf('%s%snl*',data_location, file_sep), 1); % get full path of all sub folders
+sub_count = 0;
 for f = 1:length(folder_names)
-    cur_folder = subfolders(sprintf('%s/*_EEGSsn', folder_names{f}),1);
+    cur_folder = subfolders(sprintf('%s%s*_EEGSsn', folder_names{f}, file_sep), 1);
     if cur_folder{1} ~= 0
         sub_count = sub_count + 1;
-        new_names{sub_count} = sprintf('%s/Exp_TEXT_HCN_128_Avg', cur_folder{1});
+        new_names{sub_count} = sprintf('%s%sExp_TEXT_HCN_128_Avg', cur_folder{1}, file_sep);
     else
     end
 end
-folder_names = new_names; clear new_names;
+folder_names = new_names; clear new_names
 
 % variable 'pathnames' should now contain all of the relevant directories
 
@@ -78,7 +86,7 @@ folder_names = new_names; clear new_names;
 
 use_bins = 0;          % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 %use_bins = [0, 2, 3, 7, 9];      % would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-use_freqs = 1:2;       % indices of harmonics to include in analysis 
+use_freqs = [1:4, 6:9];       % indices of harmonics to include in analysis 
                        % these will index the harmonics present in the DFT/RLS export
                        % Because 3Hz is the carrier, and 1 Hz is the
                        % oddball, we are including only the first two
@@ -104,13 +112,13 @@ return_all = true;    % if true (the default) returns data from of the data in t
                        % all bins, harmonics, conditions, subjects, trials,
                        % regardless of what subset of the data rca has been
                        % trained on
-rca_odd = rcaSweep...
+rca_test = rcaSweep...
     (folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload, return_all);
 
-if print_figures, print('-dpsc','~/Desktop/rca_odd.ps','-append'), end
+if print_figures, print('-dpsc', fullfile(data_location, 'figures', 'rca_test.ps'), '-append'), end
 
 % THIS SECTION OF THE CODE: 
-% returns the structure 'rca_odd', whose dimensions are like this: 
+% returns the structure 'rca_test', whose dimensions are like this: 
 % There will be as many 'structs' as HARMONICS you have analysed in the
 % input data
 % The output in W and A will be nChannels (128) x n RCA components
@@ -127,9 +135,9 @@ doNR           = [];         % Naka-Rushton fitting - turned off for now, but ta
 % loop over harmonics and aggregate data!
 % note that the input and output is the same structure
 % you are simply modifying the structure, adding additional fields
-for f = 1:length(rca_odd)    
+for f = 1:length(rca_test)    
     fprintf('\n ... Harmonic no. %0.0f ...\n',f);
-    rca_odd(f) = aggregateData(rca_odd(f), keep_conditions, errorType, trialError, doNR);
+    rca_test(f) = aggregateData(rca_test(f), keep_conditions, errorType, trialError, doNR);
     % called like this:
     % aggregateData(rca_struct, keep_conditions, error_type, trial_wise, do_nr)
     % more info in 'help'
@@ -137,26 +145,26 @@ end
 
 %% INSPECT THE RCA STRUCT 
 h_idx = 1;
-if strcmp(rca_odd(h_idx).settings.rcaSubs, 'all')
+if strcmp(rca_test(h_idx).settings.rcaSubs, 'all')
     num_subs = 'all';
 else
-    num_subs = num2str(length(rca_odd(h_idx).settings.rcaSubs));
+    num_subs = num2str(length(rca_test(h_idx).settings.rcaSubs));
 end
 
-if strcmp(rca_odd(h_idx).settings.rcaConds, 'all')
-    num_conds = sprintf('all %d', num2str(size(rca_odd(h_idx).data, 1)));
+if strcmp(rca_test(h_idx).settings.rcaConds, 'all')
+    num_conds = sprintf('all %d', num2str(size(rca_test(h_idx).data, 1)));
 else
-    num_conds = num2str(length(rca_odd(h_idx).settings.rcaConds));
+    num_conds = num2str(length(rca_test(h_idx).settings.rcaConds));
 end
 
 fprintf('\n I am an rca struct, created on %s, using %s data from %s subjects, and %s conditions. \n', ...
-    rca_odd(h_idx).settings.runDate, ...
-    rca_odd(h_idx).settings.data_type, ...
+    rca_test(h_idx).settings.runDate, ...
+    rca_test(h_idx).settings.data_type, ...
     num_subs, ...
     num_conds);
 
-rca_freqs = rca_odd(h_idx).settings.freqLabels(rca_odd(h_idx).settings.rcaFreqs);
-cur_freq = rca_odd(h_idx).settings.freqLabels{rca_odd(h_idx).settings.freqIndices};
+rca_freqs = rca_test(h_idx).settings.freqLabels(rca_test(h_idx).settings.rcaFreqs);
+cur_freq = rca_test(h_idx).settings.freqLabels{rca_test(h_idx).settings.freqIndices};
 str_to_print = ' I was made using data from';
 for r = 1:(length(rca_freqs)-1)
     str_to_print = [str_to_print, sprintf(' %s,', rca_freqs{r}) ];
@@ -184,8 +192,8 @@ c_idx = 1;
 
 % Concatenate the real signal and the imaginary signal together 
 % (bin x harmonic x subject x condition)
-xy_vals = cat(2, squeeze(rca_odd(h_idx).subjects.real_signal(end, : , rc_idx, :, c_idx)), ...
-                 squeeze(rca_odd(h_idx).subjects.imag_signal(end, :,  rc_idx, :, c_idx)));
+xy_vals = cat(2, squeeze(rca_test(h_idx).subjects.real_signal(end, : , rc_idx, :, c_idx)), ...
+                 squeeze(rca_test(h_idx).subjects.imag_signal(end, :,  rc_idx, :, c_idx)));
 % Set na vals so they'll be ignored
 nan_vals = sum(isnan(xy_vals),2) > 0;
 
@@ -219,19 +227,18 @@ set(gca, gca_opts{:});
 %% %% %% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
 close all;
 % set parameters
-rc_idx = 1;
-h_idx = 1;
-c_idx = 1;
-
+comp_to_flip = 1;
 % create rca_new struct to be flipped
-rca_new = rca_odd;
+rca_new = rca_test;
 
 % flip rca components and data
-for h = 1:length(use_freqs)
-    rca_new(h) = flipSwapRCA(rca_odd(h), [], rc_idx);
+for h = 1:length(rca_test)
+    rca_new(h) = flipSwapRCA(rca_test(h), [], comp_to_flip);
     rca_new(h) = aggregateData(rca_new(h), keep_conditions, errorType, trialError, doNR);
 end
 %% PLOT IT!
+h_idx = 2;
+c_idx = 1;
 % ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
@@ -245,13 +252,14 @@ fig_pos = set(gcf, 'position', fig_pos);
 
 num_rows = 3;
 num_cols = 3;
-x_max = 30;
-y_max = 10;
+x_max = 5;
+y_max = 5;
+ty_max = 20;
 for z = 1:num_rows
     if z == 1  
-        cur_rca = rca_odd;
+        cur_rca = rca_test;
         cur_idx = rc_idx;
-        cur_w = rca_odd(h_idx).A(:,cur_idx);
+        cur_w = rca_test(h_idx).A(:,cur_idx);
     elseif z == 2
         cur_rca = rca_new;
         cur_idx = rc_idx;
@@ -259,10 +267,11 @@ for z = 1:num_rows
     else
         cur_rca = rca_new;
         cur_idx = n_comp + 1; % comparison channel
-        n_electrodes = size(rca_odd(h_idx).W, 1);
-        cur_w = zeros(n_electrodes,1); cur_w(chanToCompare) = 1; 
-        x_max = 5;
-        y_max = 2;
+        n_electrodes = size(rca_test(h_idx).W, 1);
+        cur_w = zeros(n_electrodes,1); cur_w(comp_channel) = 1; 
+        x_max = 1;
+        y_max = 1;
+        ty_max = 4;
     end
     if z < 3
         % plot topographies
@@ -272,7 +281,7 @@ for z = 1:num_rows
         hold off
     else
         subplot(num_rows, num_cols, 1+(z-1)*num_cols); hold on;
-        mrC.plotOnEgi(ones(n_electrodes, 1)*.5, [], [], chanToCompare, true);
+        mrC.plotOnEgi(ones(n_electrodes, 1)*.5, [], [], comp_channel, true);
 %         cube = colorcube; 
 %         cube = cube(250, :);
         colormap(gca, gray);
@@ -327,7 +336,6 @@ for z = 1:num_rows
     axx_mean = nanmean(cell2mat(axx_rca_full.rcaWave(c_idx,:)),2);
     axx_stderr = nanstd(cell2mat(axx_rca_full.rcaWave(c_idx,:)),0,2)./sqrt(length(folder_names));
     ph(c_idx) = plot(x_vals(1:length(axx_mean)), axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
-    ty_max = 50;
     ylim([-ty_max, ty_max])
     hold on; 
     ErrorBars(x_vals(1:length(axx_mean))', axx_mean, axx_stderr,'color',colors(c_idx,:));
@@ -337,13 +345,13 @@ end
 %% Pull out phase significance - another way 
 
 % Shows average t_sig for each component for the first harmonic
-%squeeze(rca_odd(1).stats.t_sig(end, 1, :));
+%squeeze(rca_test(1).stats.t_sig(end, 1, :));
 
 % Shows average t2_sig for each component for the first harmonic
 %squeeze(rcaStruct(1).stats.t2_sig(end, 1, :));
 
 % Can also look at this bin-by-bin
-%squeeze(rca_odd(1).stats.t2_sig(:, 1, :))
+%squeeze(rca_test(1).stats.t2_sig(:, 1, :))
 
 %% LOAD IN AXX DATA
 % set parameters
@@ -438,12 +446,12 @@ h_idx = 4;
 conds_to_compare = [1, 3];
 
 % run student's t-test on projected amplitudes
-project_data = squeeze(rca_odd(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+project_data = squeeze(rca_test(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
 [project_T, project_P, ci, temp_stats] = ttest(project_data(:,1), project_data(:,2), 'dim', 1, 'tail', 'both');
 
 % run Hotelling's T-squared test using real and imaginary values
-real_data = squeeze(rca_odd(h_idx).subjects.real_signal(bin_idx,:,rc_idx,:,conds_to_compare));
-imag_data = squeeze(rca_odd(h_idx).subjects.imag_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+real_data = squeeze(rca_test(h_idx).subjects.real_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+imag_data = squeeze(rca_test(h_idx).subjects.imag_signal(bin_idx,:,rc_idx,:,conds_to_compare));
 combined_data = cat(3, real_data, imag_data);
 combined_data = permute(combined_data, [1,3,2]);
 t2results = tSquaredFourierCoefs(combined_data);
@@ -461,9 +469,9 @@ fprintf('-> Hotelling''s t2: t2(%d, %d) = %.3f, p = %.3f \n\n', t2results.df1, t
 % for h  = 1:length(use_freqs)
 %     for c = 1:length(nComp)
 %     % Find the mean amplitude of each component 
-%     curr_amp = rca_odd(h).mean.amp_signal(end, : , c); %currently just for 
-%     curr_errlo = rca_odd(h).stats.amp_lo_err(end, : , c);
-%     curr_errhi = rca_odd(h).stats.amp_up_err(end, : , c);
+%     curr_amp = rca_test(h).mean.amp_signal(end, : , c); %currently just for 
+%     curr_errlo = rca_test(h).stats.amp_lo_err(end, : , c);
+%     curr_errhi = rca_test(h).stats.amp_up_err(end, : , c);
 %     end
 %     bar(comp_n, curr_amp);
 %     
