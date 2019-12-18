@@ -29,16 +29,22 @@
 close all; clc;
 
 % ! change the variables below to point to your git and data folder !
-data_location = 'C:\Users\fangwang\Desktop\Lochy_RCA';
-git_folder = 'C:\Users\fangwang\code\git';
+data_location = '/Volumes/BACKUP/Lochy_RCA';
+git_folder = '~/code/git';
 
 % Add the RCA toolboxes
 if isempty(which('rcaRun'))
     addpath(genpath(fullfile(git_folder, 'export_fig')),'-end');
     addpath(genpath(fullfile(git_folder, 'rcaBase')),'-end');
     addpath(genpath(fullfile(git_folder, 'mrC')),'-end');
-    addpath(genpath(fullfile(git_folder, 'matlab_lib', 'misc')),'-end');
-    addpath(genpath(fullfile(git_folder, 'matlab_lib', 'figures')),'-end');
+    if exist(genpath(fullfile(git_folder, 'matlab_lib')), 'dir')
+        addpath(genpath(fullfile(git_folder, 'matlab_lib', 'misc')),'-end');
+        addpath(genpath(fullfile(git_folder, 'matlab_lib', 'figure')),'-end');
+    else
+        % pjkohler's version
+        addpath(genpath(fullfile(git_folder, 'schlegel', 'matlab_lib', 'misc')),'-end');
+        addpath(genpath(fullfile(git_folder, 'schlegel', 'matlab_lib', 'figure')),'-end');
+    end
 else
 end
 
@@ -66,6 +72,18 @@ else
 end
 
 folder_names = subfolders(sprintf('%s%snl*',data_location, file_sep), 1); % get full path of all sub folders
+
+if ~folder_names{1}
+    folder_names = subfolders(sprintf('%s%sblc*',data_location, file_sep), 1); % get full path of all sub folders
+else
+end
+
+if ~folder_names{1}
+    msg = 'No SSVEP data in data_location!';
+    error(msg)
+else
+end
+
 sub_count = 0;
 for f = 1:length(folder_names)
     cur_folder = subfolders(sprintf('%s%s*_EEGSsn', folder_names{f}, file_sep), 1);
@@ -111,7 +129,8 @@ force_reload = false;  % if true, reload the data text files and generate
 return_all = true;    % if true (the default) returns data from of the data in the dataset,
                        % all bins, harmonics, conditions, subjects, trials,
                        % regardless of what subset of the data rca has been
-                       % trained on
+                       % trained on. If false, only return data that rca
+                       % was trained on. w
 rca_test = rcaSweep...
     (folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload, return_all);
 
@@ -122,6 +141,13 @@ if print_figures, print('-dpsc', fullfile(data_location, 'figures', 'rca_test.ps
 % There will be as many 'structs' as HARMONICS you have analysed in the
 % input data
 % The output in W and A will be nChannels (128) x n RCA components
+
+%% FIGURE PARAMETERS (will be used later)
+
+l_width = 1;
+f_size = 12;
+text_opts = {'fontweight','normal','fontname','Helvetica','fontsize', f_size};
+gca_opts = [{'tickdir','out','ticklength',[0.0200,0.0200],'box','off','linewidth',l_width, 'clipping', 'off'}, text_opts];
 
 %% DO AVERAGE AND STATISTICS ON RCA STRUCT
 % Now that we have run our analyses on individual subjects, we can generate
@@ -172,11 +198,122 @@ end
 str_to_print = [str_to_print, sprintf(' and %s. This part of the array of structs contain data from %s.\n', rca_freqs{end}, cur_freq) ];
 fprintf('%s', str_to_print)
 
-%% FIGURE PARAMS
-l_width = 1;
-f_size = 12;
-text_opts = {'fontweight','normal','fontname','Helvetica','fontsize', f_size};
-gca_opts = [{'tickdir','out','ticklength',[0.0200,0.0200],'box','off','linewidth',l_width, 'clipping', 'off'}, text_opts];
+%% LOAD IN AXX DATA
+% set parameters
+h_idx = 1;
+conds_to_compare = [1, 3];
+
+cur_w = rca_test(h_idx).W; % note, h_idx does not matter here, because W is the same for all harmonics
+
+% make axxRCA struct 
+axx_test = rcaWaveProject(folder_names, cur_w);
+% FANG: WRITE SOMETHING ABOUT HOW COOL rcaWaveProject is! 
+% [dual functionality, input can be both pathnames or 
+% a cell matrix of sensor data
+
+%% ASSESS WHICH RC COMPONENTS SHOULD BE FLIPPED
+% determine which components should be flipped based on the axx data
+[flip_list, corr_list] = componentComparison(axx_test);
+comp_to_flip = find(flip_list(1,:));
+% FANG: WRITE SOME CODE TO EXPRESS THE CONSISTENTY OF COMPONENT SIGN ACROSS
+% THE HIGH CORRELATIONS
+
+%% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
+close all;
+% create rca_new struct to be flipped
+rca_flipped = rca_test;
+
+new_order = []; % note, you can use the function to flip your RC order as well
+                % just provide the order here e.g. new_order = [2, 1, 3 ,4 5]
+
+% flip rca components and data
+for h = 1:length(rca_test)
+    rca_flipped(h) = flipSwapRCA(rca_test(h), new_order, comp_to_flip);
+    rca_flipped(h) = aggregateData(rca_flipped(h), keep_conditions, errorType, trialError, doNR);
+end
+
+cur_w = rca_test(h_idx).W; % note, h_idx does not matter here, because W is the same for all harmonics
+
+% make axxRCA struct for flipped data
+axx_flipped = rcaWaveProject(folder_names, cur_w);
+
+%% DO TIME-DOMAIN STATISTICS USING AXX DATA
+
+% reorganize structure to take the difference of the waveforms 
+diff_comp = cell2mat(permute(axx_flipped.rcaWave(conds_to_compare,:),[3,2,1]));
+diff_comp = diff_comp(:,:,1) - diff_comp(:,:,2);
+
+% set max number of permutations 
+n_perms = 50000;
+
+% choose type of test statistic - size, height, or mass - mass accounts for length & amplitude
+test_stat = 'mass'; 
+ 
+% run the ttest_permute_sstats function
+[realH, realP, realT, corrH, critVal, supraThr, clustDistrib ]= ttest_permute_sstats(diff_comp, n_perms, test_stat);
+
+%% ...  AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
+close all;
+
+% significance colors
+p_colormap = jmaColors('pval');
+p_colormap(end,:) = [1 1 1];
+
+% set parameters
+axx_xvals = linspace(0,1,420+1);
+axx_xvals = axx_xvals(2:end);
+axx_xvals = axx_xvals(1:length(axx_mean));
+axx_yunit = 1; axx_ymin = -5; axx_ymax = 5;
+axx_xmin = 0; axx_xmax = max(axx_xvals);
+
+sig_pos(1) = axx_ymax;
+sig_pos(2) = axx_ymax -( axx_ymax-axx_ymin) *.05; 
+
+% red   green   blue
+colors = [1,0,0; 0,1,0; 0,0,1];
+
+figure;
+hold on;
+% plot line at 0
+plot([axx_xmin, axx_xmax], zeros(2,1), 'k-', 'linewidth', l_width)
+
+% plot averaged waveforms from each condition and standard errors
+for c = 1:length(conds_to_compare) % All conditions except Vernier
+    axx_mean = nanmean(cell2mat(axx_flipped.rcaWave(conds_to_compare(c),:)),2);
+    axx_stderr = nanstd(cell2mat(axx_flipped.rcaWave(conds_to_compare(c),:)),0,2)./sqrt(length(folder_names));
+    ph(c) = plot(axx_xvals, axx_mean, '-', 'linewidth', l_width, 'color', colors(c,:));
+    ErrorBars(axx_xvals', axx_mean, axx_stderr,'color',colors(c,:));
+end
+
+% plot corrected t-values
+regionIdx = bwlabel(corrH);
+for m=1:max(regionIdx)
+    tmp = regionprops(regionIdx == m,'centroid');
+    idx = round(tmp.Centroid(2));
+    hTxt = text(axx_xvals(idx), sig_pos(1),'*','fontsize',36,'fontname','Helvetica','horizontalalignment','center','verticalalignment','cap');
+end
+
+% plot uncorrected t-values
+cur_p = repmat( realP', 20,1 );
+h_img = image([min(axx_xvals),max(axx_xvals)],[sig_pos(1),sig_pos(2)], cur_p, 'CDataMapping', 'scaled','Parent',gca);
+colormap( gca, p_colormap );   
+c_mapmax = .05+2*.05/(size(p_colormap,1));
+set( gca, 'CLim', [ 0 c_mapmax ] ); % set range for color scale
+set(gca, gca_opts{:});
+uistack(h_img,'bottom')
+
+% plot averaged difference of conditions
+diff_mean = nanmean(diff_comp,2);
+plot(axx_xvals, diff_mean, '-', 'linewidth', 2, 'color', colors(c+1,:));
+
+% specify plot limits and legend
+cond_labels = arrayfun(@(x) ['\itcondition ', num2str(x)], conds_to_compare, 'uni', false);
+xlim([axx_xmin, axx_xmax]);
+ylim([axx_ymin, axx_ymax]);
+legend(ph, cond_labels, text_opts{:}, 'box', 'off');
+set(gca, gca_opts{:}); 
+
+hold off
 
 %% PLOT ERROR ELLIPSE
 close all;
@@ -224,21 +361,12 @@ axis square
 plot([-x_max, x_max], zeros(1,2), 'k-', 'linewidth',l_width)
 plot(zeros(1,2), [-y_max, y_max], 'k-', 'linewidth',l_width)
 set(gca, gca_opts{:});
-%% %% %% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
-close all;
-% set parameters
-comp_to_flip = 1;
-% create rca_new struct to be flipped
-rca_new = rca_test;
 
-% flip rca components and data
-for h = 1:length(rca_test)
-    rca_new(h) = flipSwapRCA(rca_test(h), [], comp_to_flip);
-    rca_new(h) = aggregateData(rca_new(h), keep_conditions, errorType, trialError, doNR);
-end
-%% PLOT IT!
+%% COMPARE FLIPPED AND NON-FLIPPED DATA
+% in the frequency and time domain
 h_idx = 2;
 c_idx = 1;
+rc_idx = 4;
 % ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
@@ -259,13 +387,13 @@ for z = 1:num_rows
     if z == 1  
         cur_rca = rca_test;
         cur_idx = rc_idx;
-        cur_w = rca_test(h_idx).A(:,cur_idx);
+        cur_w = rca_test(h_idx).W(:,cur_idx);
     elseif z == 2
-        cur_rca = rca_new;
+        cur_rca = rca_flipped;
         cur_idx = rc_idx;
-        cur_w = rca_new(h_idx).A(:,cur_idx);
+        cur_w = rca_flipped(h_idx).W(:,cur_idx);
     else
-        cur_rca = rca_new;
+        cur_rca = rca_flipped;
         cur_idx = n_comp + 1; % comparison channel
         n_electrodes = size(rca_test(h_idx).W, 1);
         cur_w = zeros(n_electrodes,1); cur_w(comp_channel) = 1; 
@@ -326,15 +454,15 @@ for z = 1:num_rows
     %Plot time domain
     subplot(num_cols, num_rows, 3+(z-1)*num_cols)
     hold on
-    axx_rca_full = rcaWaveProject(folder_names, cur_w);
+    axx_test_full = rcaWaveProject(folder_names, cur_w);
     x_vals = linspace(0,1,420+1);
     x_vals = x_vals(2:end); 
 
     % Define colors (red   green   blue)
     colors = [1,0,0; 0,1,0; 0,0,1; 0 1 1];
 
-    axx_mean = nanmean(cell2mat(axx_rca_full.rcaWave(c_idx,:)),2);
-    axx_stderr = nanstd(cell2mat(axx_rca_full.rcaWave(c_idx,:)),0,2)./sqrt(length(folder_names));
+    axx_mean = nanmean(cell2mat(axx_test_full.rcaWave(c_idx,:)),2);
+    axx_stderr = nanstd(cell2mat(axx_test_full.rcaWave(c_idx,:)),0,2)./sqrt(length(folder_names));
     ph(c_idx) = plot(x_vals(1:length(axx_mean)), axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
     ylim([-ty_max, ty_max])
     hold on; 
@@ -353,96 +481,11 @@ end
 % Can also look at this bin-by-bin
 %squeeze(rca_test(1).stats.t2_sig(:, 1, :))
 
-%% LOAD IN AXX DATA
-% set parameters
-rc_idx = 1;
-h_idx = 1;
-conds_to_compare = [1, 3];
-cur_w = rca_new(h_idx).A(:,rc_idx);
-
-% make axxRCA struct 
-axx_rca_full = rcaWaveProject(folder_names, cur_w);
-
-% reorganize structure to take the difference of the waveforms 
-diff_comp = cell2mat(permute(axx_rca_full.rcaWave(conds_to_compare,:),[3,2,1]));
-diff_comp = diff_comp(:,:,1) - diff_comp(:,:,2);
-
-% set max number of permutations 
-n_perms = 50000;
-
-% choose type of test statistic - size, height, or mass - mass accounts for length & amplitude
-test_stat = 'mass'; 
- 
-% run the ttest_permute_sstats function
-[realH, realP, realT, corrH, critVal, supraThr, clustDistrib ]= ttest_permute_sstats(diff_comp, n_perms, test_stat);
-
-%% ...  AND PLOT THEM FOR AN FREQ DOMAIN-DEFINED RC
-close all;
-
-% significance colors
-p_colormap = jmaColors('pval');
-p_colormap(end,:) = [1 1 1];
-
-% set parameters
-axx_xvals = linspace(0,1,421);
-axx_xvals = axx_xvals(2:end); 
-axx_yunit = 4; axx_ymin = -80; axx_ymax = 80;
-axx_xmin = 0; axx_xmax = max(axx_xvals);
-
-sig_pos(1) = axx_ymax;
-sig_pos(2) = axx_ymax -( axx_ymax-axx_ymin) *.05; 
-
-% red   green   blue
-colors = [1,0,0; 0,1,0; 0,0,1];
-
-figure;
-hold on;
-% plot line at 0
-plot([axx_xmin, axx_xmax], zeros(2,1), 'k-', 'linewidth', l_width)
-
-% plot averaged waveforms from each condition and standard errors
-for c = 1:length(conds_to_compare) % All conditions except Vernier
-    axx_mean = nanmean(cell2mat(axx_rca_full.rcaWave(conds_to_compare(c),:)),2);
-    axx_stderr = nanstd(cell2mat(axx_rca_full.rcaWave(conds_to_compare(c),:)),0,2)./sqrt(length(folder_names));
-    ph(c) = plot(axx_xvals, axx_mean, '-', 'linewidth', l_width, 'color', colors(c,:));
-    ErrorBars(axx_xvals', axx_mean, axx_stderr,'color',colors(c,:));
-end
-
-% plot corrected t-values
-regionIdx = bwlabel(corrH);
-for m=1:max(regionIdx)
-    tmp = regionprops(regionIdx == m,'centroid');
-    idx = round(tmp.Centroid(2));
-    hTxt = text(axx_xvals(idx), sig_pos(1),'*','fontsize',36,'fontname','Helvetica','horizontalalignment','center','verticalalignment','cap');
-end
-
-% plot uncorrected t-values
-cur_p = repmat( realP', 20,1 );
-h_img = image([min(axx_xvals),max(axx_xvals)],[sig_pos(1),sig_pos(2)], cur_p, 'CDataMapping', 'scaled','Parent',gca);
-colormap( gca, p_colormap );   
-c_mapmax = .05+2*.05/(size(p_colormap,1));
-set( gca, 'CLim', [ 0 c_mapmax ] ); % set range for color scale
-set(gca, gca_opts{:});
-uistack(h_img,'bottom')
-
-% plot averaged difference of conditions
-diff_mean = nanmean(diff_comp,2);
-plot(x_vals, diff_mean, '-', 'linewidth', 2, 'color', colors(c+1,:));
-
-% specify plot limits and legend
-cond_labels = arrayfun(@(x) ['\itcondition ', num2str(x)], conds_to_compare, 'uni', false);
-xlim([axx_xmin, axx_xmax]);
-ylim([axx_ymin, axx_ymax]);
-legend(ph, cond_labels, text_opts{:}, 'box', 'off');
-set(gca, gca_opts{:}); 
-
-hold off
-
 %% COMPARE CONDITIONS IN THE FREQUENCY DOMAIN
 % set parameters
 rc_idx = 1;
 bin_idx = 11;
-h_idx = 4;
+h_idx = 2;
 conds_to_compare = [1, 3];
 
 % run student's t-test on projected amplitudes
