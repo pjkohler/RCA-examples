@@ -201,8 +201,6 @@ fprintf('%s', str_to_print)
 %% LOAD IN AXX DATA
 % set parameters
 h_idx = 1;
-conds_to_compare = [1, 3];
-
 cur_w = rca_test(h_idx).W; % note, h_idx does not matter here, because W is the same for all harmonics
 
 % make axxRCA struct 
@@ -232,13 +230,13 @@ for h = 1:length(rca_test)
     rca_flipped(h) = aggregateData(rca_flipped(h), keep_conditions, errorType, trialError, doNR);
 end
 
-cur_w = rca_test(h_idx).W; % note, h_idx does not matter here, because W is the same for all harmonics
+cur_w = rca_flipped(h_idx).W; % note, h_idx does not matter here, because W is the same for all harmonics
 
 % make axxRCA struct for flipped data
 axx_flipped = rcaWaveProject(folder_names, cur_w);
 
 %% DO TIME-DOMAIN STATISTICS USING AXX DATA
-
+conds_to_compare = [1, 2];
 % reorganize structure to take the difference of the waveforms 
 diff_comp = cell2mat(permute(axx_flipped.rcaWave(conds_to_compare,:),[3,2,1]));
 diff_comp = diff_comp(:,:,1) - diff_comp(:,:,2);
@@ -260,14 +258,11 @@ p_colormap = jmaColors('pval');
 p_colormap(end,:) = [1 1 1];
 
 % set parameters
+num_t = size(axx_flipped.rcaWave{conds_to_compare(1),1},1);
 axx_xvals = linspace(0,1,420+1);
 axx_xvals = axx_xvals(2:end);
-axx_xvals = axx_xvals(1:length(axx_mean));
-axx_yunit = 1; axx_ymin = -5; axx_ymax = 5;
+axx_xvals = axx_xvals(1:num_t);
 axx_xmin = 0; axx_xmax = max(axx_xvals);
-
-sig_pos(1) = axx_ymax;
-sig_pos(2) = axx_ymax -( axx_ymax-axx_ymin) *.05; 
 
 % red   green   blue
 colors = [1,0,0; 0,1,0; 0,0,1];
@@ -277,13 +272,24 @@ hold on;
 % plot line at 0
 plot([axx_xmin, axx_xmax], zeros(2,1), 'k-', 'linewidth', l_width)
 
+axx_ymax = 0;
+
 % plot averaged waveforms from each condition and standard errors
 for c = 1:length(conds_to_compare) % All conditions except Vernier
     axx_mean = nanmean(cell2mat(axx_flipped.rcaWave(conds_to_compare(c),:)),2);
     axx_stderr = nanstd(cell2mat(axx_flipped.rcaWave(conds_to_compare(c),:)),0,2)./sqrt(length(folder_names));
     ph(c) = plot(axx_xvals, axx_mean, '-', 'linewidth', l_width, 'color', colors(c,:));
     ErrorBars(axx_xvals', axx_mean, axx_stderr,'color',colors(c,:));
+    cur_max = ceil(max(abs([axx_mean-axx_stderr; axx_mean+axx_stderr])));
+    if cur_max > axx_ymax
+        axx_ymax = cur_max;
+    else
+    end
 end
+
+axx_ymin = - axx_ymax; axx_yunit = 1;
+sig_pos(1) = axx_ymax;
+sig_pos(2) = axx_ymax -( axx_ymax-axx_ymin) *.05; 
 
 % plot corrected t-values
 regionIdx = bwlabel(corrH);
@@ -304,17 +310,18 @@ uistack(h_img,'bottom')
 
 % plot averaged difference of conditions
 diff_mean = nanmean(diff_comp,2);
-plot(axx_xvals, diff_mean, '-', 'linewidth', 2, 'color', colors(c+1,:));
+diff_h = plot(axx_xvals, diff_mean, '-', 'linewidth', l_width, 'color', colors(c+1,:));
 
 % specify plot limits and legend
 cond_labels = arrayfun(@(x) ['\itcondition ', num2str(x)], conds_to_compare, 'uni', false);
 xlim([axx_xmin, axx_xmax]);
 ylim([axx_ymin, axx_ymax]);
-legend(ph, cond_labels, text_opts{:}, 'box', 'off');
-set(gca, gca_opts{:}); 
+legend([ph, diff_h], [cond_labels, '\itdifference'], text_opts{:}, 'box', 'off', 'location', 'southwest');
+set(gca, gca_opts{:}, 'ytick', axx_ymin:axx_yunit:axx_ymax, 'xtick', axx_xmin:.1:axx_xmax);
+xlabel('{\ittime} (s)', text_opts{:});
+ylabel('{\itamplitude} (\muV)', text_opts{:});
 
 hold off
-
 %% PLOT ERROR ELLIPSE
 close all;
 figure
@@ -364,9 +371,9 @@ set(gca, gca_opts{:});
 
 %% COMPARE FLIPPED AND NON-FLIPPED DATA
 % in the frequency and time domain
-h_idx = 2;
+h_idx = 1;
 c_idx = 1;
-rc_idx = 4;
+rc_idx = 1;
 % ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
@@ -380,8 +387,8 @@ fig_pos = set(gcf, 'position', fig_pos);
 
 num_rows = 3;
 num_cols = 3;
-x_max = 5;
-y_max = 5;
+x_max = 2;
+y_max = 2;
 ty_max = 20;
 for z = 1:num_rows
     if z == 1  
@@ -393,7 +400,7 @@ for z = 1:num_rows
         cur_idx = rc_idx;
         cur_w = rca_flipped(h_idx).W(:,cur_idx);
     else
-        cur_rca = rca_flipped;
+        cur_rca = rca_test;
         cur_idx = n_comp + 1; % comparison channel
         n_electrodes = size(rca_test(h_idx).W, 1);
         cur_w = zeros(n_electrodes,1); cur_w(comp_channel) = 1; 
@@ -485,22 +492,26 @@ end
 % set parameters
 rc_idx = 1;
 bin_idx = 11;
-h_idx = 2;
-conds_to_compare = [1, 3];
+h_idx = 1;
+conds_to_compare = [1, 2];
 
 % run student's t-test on projected amplitudes
-project_data = squeeze(rca_test(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+project_data = squeeze(rca_flipped(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
 [project_T, project_P, ci, temp_stats] = ttest(project_data(:,1), project_data(:,2), 'dim', 1, 'tail', 'both');
 
 % run Hotelling's T-squared test using real and imaginary values
-real_data = squeeze(rca_test(h_idx).subjects.real_signal(bin_idx,:,rc_idx,:,conds_to_compare));
-imag_data = squeeze(rca_test(h_idx).subjects.imag_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+real_data = squeeze(rca_flipped(h_idx).subjects.real_signal(bin_idx,:,rc_idx,:,conds_to_compare));
+imag_data = squeeze(rca_flipped(h_idx).subjects.imag_signal(bin_idx,:,rc_idx,:,conds_to_compare));
 combined_data = cat(3, real_data, imag_data);
 combined_data = permute(combined_data, [1,3,2]);
 t2results = tSquaredFourierCoefs(combined_data);
 
+harm_text = rca_flipped(h_idx).settings.freqLabels{h_idx};
+bin_text = rca_flipped(h_idx).settings.binLabels{bin_idx};
+
 % create output of results
-fprintf('\ncomparing conditions %d and %d\n', conds_to_compare(1), conds_to_compare(2));  
+fprintf('\ncomparing conditions %d and %d, %s bin and %s harmonic\n', ...
+    conds_to_compare(1), conds_to_compare(2), bin_text, harm_text);  
 fprintf('-> student''s t-test: t(%d) = %.3f, p = %.3f\n', temp_stats.df, temp_stats.tstat, project_P);
 fprintf('-> Hotelling''s t2: t2(%d, %d) = %.3f, p = %.3f \n\n', t2results.df1, t2results.df2, t2results.tSqrd, t2results.pVal)
 
@@ -512,9 +523,9 @@ fprintf('-> Hotelling''s t2: t2(%d, %d) = %.3f, p = %.3f \n\n', t2results.df1, t
 % for h  = 1:length(use_freqs)
 %     for c = 1:length(nComp)
 %     % Find the mean amplitude of each component 
-%     curr_amp = rca_test(h).mean.amp_signal(end, : , c); %currently just for 
-%     curr_errlo = rca_test(h).stats.amp_lo_err(end, : , c);
-%     curr_errhi = rca_test(h).stats.amp_up_err(end, : , c);
+%     curr_amp = rca_flipped(h).mean.amp_signal(end, : , c); %currently just for 
+%     curr_errlo = rca_flipped(h).stats.amp_lo_err(end, : , c);
+%     curr_errhi = rca_flipped(h).stats.amp_up_err(end, : , c);
 %     end
 %     bar(comp_n, curr_amp);
 %     
