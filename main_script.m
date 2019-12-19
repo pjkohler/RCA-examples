@@ -493,7 +493,7 @@ end
 rc_idx = 1;
 bin_idx = 11;
 h_idx = 1;
-conds_to_compare = [1, 2];
+conds_to_compare = [1, 5];
 
 % run student's t-test on projected amplitudes
 project_data = squeeze(rca_flipped(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
@@ -530,6 +530,28 @@ fprintf('-> Hotelling''s t2: t2(%d, %d) = %.3f, p = %.3f \n\n', t2results.df1, t
 %     bar(comp_n, curr_amp);
 %     
 % end
+
+oddball_harmonics = [1,2,3,4];
+evenball_harmonics = [1,3,5,7,9];
+
+oddball_data = arrayfun(@(x) squeeze(rca_flipped(x).mean.amp_signal(11,1,1,1)), oddball_harmonics);
+evenball_data = arrayfun(@(x) squeeze(rca_flipped(x).mean.amp_signal(11,1,1,5)), evenball_harmonics);
+
+for z = 1:3
+    subplot(2,1,z)
+    if z == 1
+        cur_data = oddball_data;
+        cur_harm = oddball_harmonics;
+    else
+        cur_data = evenball_data;
+        cur_harm = evenball_harmonics;
+    end
+    bar(cur_data)
+    set(gca, gca_opts{:}, 'xtick', 1:size(cur_data,2), 'xticklabel', rca_flipped(1).settings.freqLabels(cur_harm));
+    xlim([.5, length(cur_harm)+.5])
+    ylim([0, 2.5]);
+end
+
     
   
 
