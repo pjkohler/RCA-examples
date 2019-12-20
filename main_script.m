@@ -29,7 +29,8 @@
 close all; clc;
 
 % ! change the variables below to point to your git and data folder !
-data_location = '/Volumes/BACKUP/Lochy_RCA';
+%data_location = '/Volumes/BACKUP/Lochy_RCA';
+data_location = '/Volumes/GoogleDrive/My Drive/2019_synapse_data';
 git_folder = '~/code/git';
 
 % Add the RCA toolboxes
@@ -50,10 +51,7 @@ end
 
 %% Set up some analysis parameters and variables
 
-print_figures  = true;                                                                             % set to true if you want to automatically print the rca topo figures and save them into the'outputs' directory
-save_name  = 'rcaData_Lochy_Cond1';    % name of output                                            % set to the desired ouput file name - this will contain one big data struct with the results from rcaSweep
-
- % change to your data directory
+% change to your data directory
 out_location = fullfile(data_location, 'outputs');     % set to your output directory
 fig_location = fullfile(data_location, 'figures');    
 
@@ -104,7 +102,7 @@ folder_names = new_names; clear new_names
 
 use_bins = 0;          % indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
 %use_bins = [0, 2, 3, 7, 9];      % would typically do this though indices of bins to include in analysis (the values must be present in the bin column of all DFT/RLS exports)
-use_freqs = [1:4, 6:9];       % indices of harmonics to include in analysis 
+use_freqs = [1 2];       % indices of harmonics to include in analysis 
                        % these will index the harmonics present in the DFT/RLS export
                        % Because 3Hz is the carrier, and 1 Hz is the
                        % oddball, we are including only the first two
@@ -134,7 +132,7 @@ return_all = true;    % if true (the default) returns data from of the data in t
 rca_test = rcaSweep...
     (folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload, return_all);
 
-if print_figures, print('-dpsc', fullfile(data_location, 'figures', 'rca_test.ps'), '-append'), end
+print('-dpsc', fullfile(data_location, 'figures', 'rca_test.ps'), '-append')
 
 % THIS SECTION OF THE CODE: 
 % returns the structure 'rca_test', whose dimensions are like this: 
@@ -210,11 +208,29 @@ axx_test = rcaWaveProject(folder_names, cur_w);
 % a cell matrix of sensor data
 
 %% ASSESS WHICH RC COMPONENTS SHOULD BE FLIPPED
-% determine which components should be flipped based on the axx data
-[flip_list, corr_list] = componentComparison(axx_test);
+close all;
+% determine which components should be flipped based on the frequency data
+[flip_list, corr_list] = componentComparison(rca_test, [], use_freqs);
 comp_to_flip = find(flip_list(1,:));
-% FANG: WRITE SOME CODE TO EXPRESS THE CONSISTENTY OF COMPONENT SIGN ACROSS
-% THE HIGH CORRELATIONS
+% make figure to illustrate consistenty of flip-sign
+% across different orderings
+comp_to_plot = 10; % plot first n components
+subplot(2,1,1);
+hold on
+plot(corr_list(1:comp_to_plot),'-o')
+xlim([ 0.5, comp_to_plot + .5 ] );
+set(gca, gca_opts{:});
+ylabel('{\itcorrelation} (R)', text_opts{:});
+hold off
+subplot(2,1,2)
+hold on
+imagesc(flip_list(1:comp_to_plot, :)')
+xlim([ 0.5, comp_to_plot + .5 ] );
+ylim([ 0.5, size(flip_list,2) + .5 ] );
+xlabel('{\itflip patterns}', text_opts{:});
+ylabel('{\itcomponents}', text_opts{:});
+set(gca, gca_opts{:});
+hold off
 
 %% FLIP and REORDER RCA TOPOGRAPHIES and PHASE DATA
 close all;
@@ -371,9 +387,9 @@ set(gca, gca_opts{:});
 
 %% COMPARE FLIPPED AND NON-FLIPPED DATA
 % in the frequency and time domain
-h_idx = 1;
+h_idx = 2;
 c_idx = 1;
-rc_idx = 1;
+rc_idx = 2;
 % ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
@@ -387,8 +403,8 @@ fig_pos = set(gcf, 'position', fig_pos);
 
 num_rows = 3;
 num_cols = 3;
-x_max = 2;
-y_max = 2;
+x_max = 10;
+y_max = 10;
 ty_max = 20;
 for z = 1:num_rows
     if z == 1  
@@ -404,8 +420,8 @@ for z = 1:num_rows
         cur_idx = n_comp + 1; % comparison channel
         n_electrodes = size(rca_test(h_idx).W, 1);
         cur_w = zeros(n_electrodes,1); cur_w(comp_channel) = 1; 
-        x_max = 1;
-        y_max = 1;
+        x_max = 4;
+        y_max = 4;
         ty_max = 4;
     end
     if z < 3
@@ -461,15 +477,15 @@ for z = 1:num_rows
     %Plot time domain
     subplot(num_cols, num_rows, 3+(z-1)*num_cols)
     hold on
-    axx_test_full = rcaWaveProject(folder_names, cur_w);
+    axx_temp = rcaWaveProject(folder_names, cur_w);
     x_vals = linspace(0,1,420+1);
     x_vals = x_vals(2:end); 
 
     % Define colors (red   green   blue)
     colors = [1,0,0; 0,1,0; 0,0,1; 0 1 1];
 
-    axx_mean = nanmean(cell2mat(axx_test_full.rcaWave(c_idx,:)),2);
-    axx_stderr = nanstd(cell2mat(axx_test_full.rcaWave(c_idx,:)),0,2)./sqrt(length(folder_names));
+    axx_mean = nanmean(cell2mat(axx_temp.rcaWave(c_idx,:)),2);
+    axx_stderr = nanstd(cell2mat(axx_temp.rcaWave(c_idx,:)),0,2)./sqrt(length(folder_names));
     ph(c_idx) = plot(x_vals(1:length(axx_mean)), axx_mean, '-', 'linewidth', 2, 'color', colors(c_idx,:));
     ylim([-ty_max, ty_max])
     hold on; 
@@ -493,7 +509,7 @@ end
 rc_idx = 1;
 bin_idx = 11;
 h_idx = 1;
-conds_to_compare = [1, 5];
+conds_to_compare = [1, 3];
 
 % run student's t-test on projected amplitudes
 project_data = squeeze(rca_flipped(h_idx).subjects.proj_amp_signal(bin_idx,:,rc_idx,:,conds_to_compare));
