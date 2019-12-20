@@ -131,8 +131,11 @@ return_all = true;    % if true (the default) returns data from of the data in t
                        % was trained on. w
 rca_test = rcaSweep...
     (folder_names, use_bins, use_freqs, use_conds, use_trials, use_subs, n_reg, n_comp, data_type, comp_channel, force_reload, return_all);
-
-print('-dpsc', fullfile(data_location, 'figures', 'rca_test.ps'), '-append')
+% save standard rca output
+fig_pos = get(gcf, 'pos');
+fig_pos(3) = fig_pos(4)/3 * n_comp;
+set(gcf, 'pos', fig_pos);
+export_fig(gcf, fullfile(data_location, 'figures', 'rca_test.pdf') , '-q100', '-opengl');
 
 % THIS SECTION OF THE CODE: 
 % returns the structure 'rca_test', whose dimensions are like this: 
@@ -202,15 +205,14 @@ h_idx = 1;
 cur_w = rca_test(h_idx).W; % note, h_idx does not matter here, because W is the same for all harmonics
 
 % make axxRCA struct 
+% rcaWaveProject has dual functionality, 
+% input can be both pathnames [as here] or a cell matrix of sensor data
 axx_test = rcaWaveProject(folder_names, cur_w);
-% FANG: WRITE SOMETHING ABOUT HOW COOL rcaWaveProject is! 
-% [dual functionality, input can be both pathnames or 
-% a cell matrix of sensor data
 
 %% ASSESS WHICH RC COMPONENTS SHOULD BE FLIPPED
 close all;
 % determine which components should be flipped based on the frequency data
-[flip_list, corr_list] = componentComparison(rca_test, [], use_freqs);
+[flip_list, corr_list] = componentComparison(rca_test, 64, [], use_freqs, 11);
 comp_to_flip = find(flip_list(1,:));
 % make figure to illustrate consistenty of flip-sign
 % across different orderings
@@ -387,9 +389,9 @@ set(gca, gca_opts{:});
 
 %% COMPARE FLIPPED AND NON-FLIPPED DATA
 % in the frequency and time domain
-h_idx = 2;
+h_idx = 1;
 c_idx = 1;
-rc_idx = 2;
+rc_idx = 1;
 % ellipse parameters
 ellipseType = ['1STD' 'SEM'];
 
@@ -422,7 +424,7 @@ for z = 1:num_rows
         cur_w = zeros(n_electrodes,1); cur_w(comp_channel) = 1; 
         x_max = 4;
         y_max = 4;
-        ty_max = 4;
+        ty_max = 10;
     end
     if z < 3
         % plot topographies
@@ -530,6 +532,14 @@ fprintf('\ncomparing conditions %d and %d, %s bin and %s harmonic\n', ...
     conds_to_compare(1), conds_to_compare(2), bin_text, harm_text);  
 fprintf('-> student''s t-test: t(%d) = %.3f, p = %.3f\n', temp_stats.df, temp_stats.tstat, project_P);
 fprintf('-> Hotelling''s t2: t2(%d, %d) = %.3f, p = %.3f \n\n', t2results.df1, t2results.df2, t2results.tSqrd, t2results.pVal)
+
+%% MAKE ELABORATE ELLIPSE PLOTS, AND GET DELAY DATA
+F1 = 1; % F1 in Hz
+delay_ms = 0;
+eData = rcaEllipses(rca_flipped(1), [1,2,3], [], [], F1, delay_ms);
+% add system delay
+delay_ms = 66;
+eData_delay = rcaEllipses(rca_flipped(1), [1,2,3], [], [], F1, delay_ms);
 
 %% Component amplitude plot - in progress
 
